@@ -1,5 +1,5 @@
 ver = debug
-platform = x86
+platform = x64
 
 CC = g++
 #INCLIB = /usr/local/include
