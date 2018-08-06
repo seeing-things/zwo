@@ -78,7 +78,7 @@ endif
 #endif
 
 
-all: test_gui2_snap test_gui2_video
+all: test_gui2_snap test_gui2_video test_simple_video
 test_gui2_snap:main_SDK2_snap.cpp
 	$(CC)  main_SDK2_snap.cpp -o test_gui2_snap $(CFLAGS) $(OPENCV) -lASICamera2
 	cp test_gui2_snap bin/$(platform)/
@@ -87,9 +87,12 @@ test_gui2_video:main_SDK2_video.cpp
 	$(CC)  main_SDK2_video.cpp -o test_gui2_video $(CFLAGS) $(OPENCV) -lASICamera2
 	cp test_gui2_video bin/$(platform)/
 
+test_simple_video:simple_video.cpp
+	$(CC)  simple_video.cpp -o simple_video $(CFLAGS) $(OPENCV) -lASICamera2
+	cp simple_video bin/$(platform)/
 
 clean:
-	rm -f test_gui2_snap test_gui2_video
+	rm -f test_gui2_snap test_gui2_video simple_video
 #pkg-config libusb-1.0 --cflags --libs
 #pkg-config opencv --cflags --libs
 
