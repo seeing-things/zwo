@@ -1,7 +1,14 @@
-#include <stdio.h>
+#include <cstdio>
+#include <cstdint>
+#include <deque>
+#include <unistd.h>
+#include <fcntl.h>
+#include <err.h>
 #include "ASICamera2.h"
 
 extern unsigned long GetTickCount();
+
+using namespace std;
 
 int main()
 {
@@ -100,7 +107,7 @@ int main()
         return 1;
     }
 
-    int image_size_bytes;
+    size_t image_size_bytes;
     switch (image_type)
     {
         case ASI_IMG_RAW16:
@@ -112,10 +119,25 @@ int main()
         default:
             image_size_bytes = width * height;
     }
-    printf("Each frame contains %d bytes\n", image_size_bytes);
+    printf("Each frame contains %lu bytes\n", image_size_bytes);
 
-    // TODO: Use a more flexible data structure that can act as a FIFO of frames
-    unsigned char *frame_data = new unsigned char[image_size_bytes];
+    // FIFOs holding pointers to frame buffers
+    deque<uint8_t *> unused_frame_deque;
+    deque<uint8_t *> frame_deque;
+
+    // Allocate pool of frame buffers
+    constexpr size_t FRAME_POOL_SIZE = 64;
+    for(int i = 0; i < FRAME_POOL_SIZE; i++)
+    {
+        unused_frame_deque.push_front(new uint8_t[image_size_bytes]);
+    }
+
+    constexpr char FILE_NAME[] = "/home/rgottula/Desktop/test.bin";
+    int fd = open(FILE_NAME, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0)
+    {
+        err(1, "open(%s) failed", FILE_NAME);
+    }
 
     asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)
@@ -128,7 +150,14 @@ int main()
     int time1 = GetTickCount();
     while (true)
     {
-        asi_rtn = ASIGetVideoData(CamInfo.CameraID, frame_data, image_size_bytes, 200);
+        if (unused_frame_deque.empty())
+        {
+            printf("Frame buffer pool exhausted.\n");
+            return 1;
+        }
+        uint8_t *frame_buffer = unused_frame_deque.back();
+        unused_frame_deque.pop_back();
+        asi_rtn = ASIGetVideoData(CamInfo.CameraID, frame_buffer, image_size_bytes, 200);
         if (asi_rtn == ASI_SUCCESS)
         {
             frame_count++;
@@ -136,6 +165,25 @@ int main()
         else
         {
             printf("GetVideoData failed with error code %d\n", (int)asi_rtn);
+        }
+        frame_deque.push_front(frame_buffer);
+
+        printf("The deque has %d frames, the pool has %d free buffers.\n", frame_deque.size(), unused_frame_deque.size());
+
+        if (frame_deque.empty() == false)
+        {
+            frame_buffer = frame_deque.back();
+            frame_deque.pop_back();
+            ssize_t n = write(fd, frame_buffer, image_size_bytes);
+            if (n < 0)
+            {
+                err(1, "write failed");
+            }
+            else if (n != image_size_bytes)
+            {
+                err(1, "write incomplete (%zd/%zu)", n, image_size_bytes);
+            }
+            unused_frame_deque.push_front(frame_buffer);
         }
 
 
@@ -153,6 +201,18 @@ int main()
     // this is currently unreachable but keeping it since it shows the proper way to shut down
     ASIStopVideoCapture(CamInfo.CameraID);
     ASICloseCamera(CamInfo.CameraID);
-    delete [] frame_data;
+
+    while (frame_deque.empty() == false)
+    {
+        delete [] frame_deque.back();
+        frame_deque.pop_back();
+    }
+
+    while (unused_frame_deque.empty() == false)
+    {
+        delete [] unused_frame_deque.back();
+        unused_frame_deque.pop_back();
+    }
+
     return 0;
 }
