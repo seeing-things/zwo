@@ -4,6 +4,7 @@
 #include <deque>
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include <unistd.h>
 #include <fcntl.h>
 #include <err.h>
@@ -22,12 +23,63 @@ mutex unused_frame_deque_mutex;
 mutex asi_mutex;
 
 
+class Frame
+{
+public:
+    Frame(size_t image_size_bytes, deque<Frame *> *unused_frame_deque) :
+        image_size_bytes_(image_size_bytes),
+        unused_frame_deque_(unused_frame_deque),
+        ref_count_(0)
+    {
+        frame_buffer_ = new uint8_t[image_size_bytes];
+        unused_frame_deque_->push_front(this);
+    }
+
+    ~Frame()
+    {
+        delete [] frame_buffer_;
+    }
+
+    void incrRefCount()
+    {
+        // Assume this Frame object has already been removed from the unused frame deque
+        ref_count_++;
+    }
+
+    void decrRefCount()
+    {
+        // Ensure this function is reentrant
+        std::lock_guard<std::mutex> lock(decr_mutex_);
+
+        if (ref_count_ <= 0)
+        {
+            err(1, "Frame.decrRefCount called on Frame where ref_count_ was already zero!");
+        }
+
+        ref_count_--;
+
+        if (ref_count_ == 0)
+        {
+            unique_lock<mutex> unused_frame_deque_lock(unused_frame_deque_mutex);
+            unused_frame_deque_->push_front(this);
+            unused_frame_deque_lock.unlock();
+        }
+    }
+
+    const size_t image_size_bytes_;
+    uint8_t *frame_buffer_;
+
+private:
+    deque<Frame *> * const unused_frame_deque_;
+    std::atomic_int ref_count_;
+    std::mutex decr_mutex_;
+};
+
+
 // Writes frames of data to disk as quickly as possible. Run as a thread.
 void write_to_disk(
     int fd,
-    size_t image_size_bytes,
-    deque<uint8_t *> &frame_deque,
-    deque<uint8_t *> &unused_frame_deque)
+    deque<Frame *> &frame_deque)
 {
     while (true)
     {
@@ -39,23 +91,21 @@ void write_to_disk(
         }
         else
         {
-            uint8_t *frame_buffer = frame_deque.back();
+            Frame *frame = frame_deque.back();
             frame_deque_lock.unlock();
-            ssize_t n = write(fd, frame_buffer, image_size_bytes);
+            ssize_t n = write(fd, frame->frame_buffer_, frame->image_size_bytes_);
             if (n < 0)
             {
                 err(1, "write failed");
             }
-            else if (n != image_size_bytes)
+            else if (n != frame->image_size_bytes_)
             {
-                err(1, "write incomplete (%zd/%zu)", n, image_size_bytes);
+                err(1, "write incomplete (%zd/%zu)", n, frame->image_size_bytes_);
             }
             frame_deque_lock.lock();
             frame_deque.pop_back();
             frame_deque_lock.unlock();
-            unique_lock<mutex> unused_frame_deque_lock(unused_frame_deque_mutex);
-            unused_frame_deque.push_front(frame_buffer);
-            unused_frame_deque_lock.unlock();
+            frame->decrRefCount();
         }
     }
 }
@@ -63,8 +113,7 @@ void write_to_disk(
 
 void agc(
     ASI_CAMERA_INFO CamInfo,
-    size_t image_size_bytes,
-    deque<uint8_t *> &frame_deque)
+    deque<Frame *> &frame_deque)
 {
     uint32_t hist[256];
     int gain = 0;
@@ -93,10 +142,13 @@ void agc(
             continue;
         }
 
-        // Grab pointer to the most recent frame
-        // TODO: Add reference counter to ensure this frame is not overwritten while this thread is
-        // using it!
-        uint8_t *frame_buffer = frame_deque.front();
+        /*
+         * Grab pointer to the most recent frame. Increment reference count *before* releasing
+         * deque mutex to ensure that the write_to_disk thread can't decrement the reference count
+         * before it is incremented here.
+         */
+        Frame *frame = frame_deque.front();
+        frame->incrRefCount();
         frame_deque_lock.unlock();
 
         // Clear histogram array
@@ -104,12 +156,13 @@ void agc(
 
         // Generate histogram
         uint8_t max_val = 0;
-        for (size_t i = 0; i < image_size_bytes; i++)
+        for (size_t i = 0; i < frame->image_size_bytes_; i++)
         {
-            uint8_t pixel_val = frame_buffer[i];
+            uint8_t pixel_val = frame->frame_buffer_[i];
             max_val = std::max(max_val, pixel_val);
             hist[pixel_val]++;
         }
+        frame->decrRefCount();
 
         // Adjust gain
         bool gain_changed = true;
@@ -139,6 +192,7 @@ void agc(
         }
     }
 }
+
 
 int main()
 {
@@ -245,15 +299,16 @@ int main()
     }
     printf("Each frame contains %lu bytes\n", image_size_bytes);
 
-    // FIFOs holding pointers to frame buffers
-    deque<uint8_t *> unused_frame_deque;
-    deque<uint8_t *> frame_deque;
+    // FIFOs holding pointers to frame objects
+    deque<Frame *> unused_frame_deque;
+    deque<Frame *> frame_deque;
 
-    // Allocate pool of frame buffers
+    // Create pool of frame buffers
     constexpr size_t FRAME_POOL_SIZE = 64;
     for(int i = 0; i < FRAME_POOL_SIZE; i++)
     {
-        unused_frame_deque.push_front(new uint8_t[image_size_bytes]);
+        // Frame objects add themselves to unused_frame_deque on construction
+        new Frame(image_size_bytes, &unused_frame_deque);
     }
 
     constexpr char FILE_NAME[] = "/home/rgottula/Desktop/test.bin";
@@ -267,16 +322,13 @@ int main()
     thread write_to_disk_thread(
         write_to_disk,
         fd,
-        image_size_bytes,
-        ref(frame_deque),
-        ref(unused_frame_deque)
+        ref(frame_deque)
     );
 
     // start thread for AGC
     thread agc_thread(
         agc,
         CamInfo,
-        image_size_bytes,
         ref(frame_deque)
     );
 
@@ -293,6 +345,7 @@ int main()
     int time1 = GetTickCount();
     while (true)
     {
+        // Get pointer to an available Frame object
         unique_lock<mutex> unused_frame_deque_lock(unused_frame_deque_mutex);
         if (unused_frame_deque.empty())
         {
@@ -300,11 +353,21 @@ int main()
             usleep(1000);
             continue;
         }
-        uint8_t *frame_buffer = unused_frame_deque.back();
+        Frame *frame = unused_frame_deque.back();
         unused_frame_deque.pop_back();
         unused_frame_deque_lock.unlock();
+
+        // Matching decrement in write_to_disk thread
+        frame->incrRefCount();
+
+        // Populate frame buffer with data from camera
         asi_lock.lock();
-        asi_rtn = ASIGetVideoData(CamInfo.CameraID, frame_buffer, image_size_bytes, 200);
+        asi_rtn = ASIGetVideoData(
+            CamInfo.CameraID,
+            frame->frame_buffer_,
+            frame->image_size_bytes_,
+            200
+        );
         asi_lock.unlock();
         if (asi_rtn == ASI_SUCCESS)
         {
@@ -314,8 +377,10 @@ int main()
         {
             printf("GetVideoData failed with error code %d\n", (int)asi_rtn);
         }
+
+        // Put this frame in the deque headed for write to disk thread
         unique_lock<mutex> frame_deque_lock(frame_deque_mutex);
-        frame_deque.push_front(frame_buffer);
+        frame_deque.push_front(frame);
         frame_deque_lock.unlock();
 
         int time2 = GetTickCount();
@@ -344,13 +409,13 @@ int main()
 
     while (frame_deque.empty() == false)
     {
-        delete [] frame_deque.back();
+        delete frame_deque.back();
         frame_deque.pop_back();
     }
 
     while (unused_frame_deque.empty() == false)
     {
-        delete [] unused_frame_deque.back();
+        delete unused_frame_deque.back();
         unused_frame_deque.pop_back();
     }
 
