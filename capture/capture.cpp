@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstring>
 #include <cstdint>
 #include <deque>
 #include <thread>
@@ -17,6 +18,9 @@ using namespace std;
 mutex frame_deque_mutex;
 mutex unused_frame_deque_mutex;
 
+// ASICamera2 API is not known to be thread-safe
+mutex asi_mutex;
+
 
 // Writes frames of data to disk as quickly as possible. Run as a thread.
 void write_to_disk(
@@ -28,10 +32,14 @@ void write_to_disk(
     while (true)
     {
         unique_lock<mutex> frame_deque_lock(frame_deque_mutex);
-        if (frame_deque.empty() == false)
+        if (frame_deque.empty())
+        {
+            frame_deque_lock.unlock();
+            usleep(1000);
+        }
+        else
         {
             uint8_t *frame_buffer = frame_deque.back();
-            frame_deque.pop_back();
             frame_deque_lock.unlock();
             ssize_t n = write(fd, frame_buffer, image_size_bytes);
             if (n < 0)
@@ -42,20 +50,101 @@ void write_to_disk(
             {
                 err(1, "write incomplete (%zd/%zu)", n, image_size_bytes);
             }
+            frame_deque_lock.lock();
+            frame_deque.pop_back();
+            frame_deque_lock.unlock();
             unique_lock<mutex> unused_frame_deque_lock(unused_frame_deque_mutex);
             unused_frame_deque.push_front(frame_buffer);
             unused_frame_deque_lock.unlock();
         }
+    }
+}
+
+
+void agc(
+    ASI_CAMERA_INFO CamInfo,
+    size_t image_size_bytes,
+    deque<uint8_t *> &frame_deque)
+{
+    uint32_t hist[256];
+    int gain = 0;
+
+    /*
+     * Initialize camera gain. Will be adjusted dynamically by this control loop. The ZWO driver's
+     * auto gain feature is disabled.
+     */
+    unique_lock<mutex> asi_lock(asi_mutex);
+    ASI_ERROR_CODE asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
+    asi_lock.unlock();
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        printf("SetControlValue error for ASI_GAIN: %d\n", (int)asi_rtn);
+    }
+
+    while (true)
+    {
+        usleep(100000);
+
+        unique_lock<mutex> frame_deque_lock(frame_deque_mutex);
+        if (frame_deque.empty())
+        {
+            // no frames available to look at
+            frame_deque_lock.unlock();
+            continue;
+        }
+
+        // Grab pointer to the most recent frame
+        // TODO: Add reference counter to ensure this frame is not overwritten while this thread is
+        // using it!
+        uint8_t *frame_buffer = frame_deque.front();
+        frame_deque_lock.unlock();
+
+        // Clear histogram array
+        memset(hist, 0, sizeof(hist));
+
+        // Generate histogram
+        uint8_t max_val = 0;
+        for (size_t i = 0; i < image_size_bytes; i++)
+        {
+            uint8_t pixel_val = frame_buffer[i];
+            max_val = std::max(max_val, pixel_val);
+            hist[pixel_val]++;
+        }
+
+        // Adjust gain
+        bool gain_changed = true;
+        if (max_val == 255)
+        {
+            gain--;
+        }
+        else if (max_val < 240)
+        {
+            gain++;
+        }
         else
         {
-            frame_deque_lock.unlock();
-            usleep(1000);
+            gain_changed = false;
+        }
+
+        if (gain_changed)
+        {
+            printf("gain: %d\n", gain);
+            asi_lock.lock();
+            asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
+            asi_lock.unlock();
+            if (asi_rtn != ASI_SUCCESS)
+            {
+                printf("SetControlValue error for ASI_GAIN: %d\n", (int)asi_rtn);
+            }
         }
     }
 }
 
 int main()
 {
+    // Hold the ASI mutex during camera initialization
+    unique_lock<mutex> asi_lock(asi_mutex);
+
     int numDevices = ASIGetNumOfConnectedCameras();
     if (numDevices <= 0)
     {
@@ -108,17 +197,6 @@ int main()
     }
 
     /*
-     * Gain initialized to 0. Will be adjusted dynamically with the custom AGC loop in this capture
-     * software. The built-in ZWO auto gain feature is disabled.
-     */
-    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, 0, ASI_FALSE);
-    if (asi_rtn != ASI_SUCCESS)
-    {
-        printf("SetControlValue error for ASI_GAIN: %d\n", (int)asi_rtn);
-        return 1;
-    }
-
-    /*
      * Experimentation has shown that the highest value for the BANDWIDTHOVERLOAD parameter that
      * results in stable performance is 94 for the ASI178MC camera and the PC hardware / OS in use.
      * Higher values result in excessive dropped frames.
@@ -150,6 +228,8 @@ int main()
         printf("SetControlValue error for ASI_WB_R: %d\n", (int)asi_rtn);
         return 1;
     }
+
+    asi_lock.unlock();
 
     size_t image_size_bytes;
     switch (image_type)
@@ -192,7 +272,17 @@ int main()
         ref(unused_frame_deque)
     );
 
+    // start thread for AGC
+    thread agc_thread(
+        agc,
+        CamInfo,
+        image_size_bytes,
+        ref(frame_deque)
+    );
+
+    asi_lock.lock();
     asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);
+    asi_lock.unlock();
     if (asi_rtn != ASI_SUCCESS)
     {
         printf("StartVideoCapture error: %d\n", (int)asi_rtn);
@@ -213,7 +303,9 @@ int main()
         uint8_t *frame_buffer = unused_frame_deque.back();
         unused_frame_deque.pop_back();
         unused_frame_deque_lock.unlock();
+        asi_lock.lock();
         asi_rtn = ASIGetVideoData(CamInfo.CameraID, frame_buffer, image_size_bytes, 200);
+        asi_lock.unlock();
         if (asi_rtn == ASI_SUCCESS)
         {
             frame_count++;
@@ -231,7 +323,9 @@ int main()
         if (time2 - time1 > 1000)
         {
             int num_dropped_frames;
+            asi_lock.lock();
             ASIGetDroppedFrames(CamInfo.CameraID, &num_dropped_frames);
+            asi_lock.unlock();
             printf("frame count: %d dropped frames: %d\n", frame_count, num_dropped_frames);
             printf(
                 "The queue has %d frames, the pool has %d free buffers.\n",
@@ -243,8 +337,10 @@ int main()
     }
 
     // this is currently unreachable but keeping it since it shows the proper way to shut down
+    asi_lock.lock();
     ASIStopVideoCapture(CamInfo.CameraID);
     ASICloseCamera(CamInfo.CameraID);
+    asi_lock.unlock();
 
     while (frame_deque.empty() == false)
     {
