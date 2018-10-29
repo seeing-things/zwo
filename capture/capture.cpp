@@ -1,14 +1,58 @@
 #include <cstdio>
 #include <cstdint>
 #include <deque>
+#include <thread>
+#include <mutex>
 #include <unistd.h>
 #include <fcntl.h>
 #include <err.h>
 #include "ASICamera2.h"
 
+// Defined by libASICamera2, returns a tick in milliseconds.
 extern unsigned long GetTickCount();
 
 using namespace std;
+
+// std::deque is not thread safe
+mutex frame_deque_mutex;
+mutex unused_frame_deque_mutex;
+
+
+// Writes frames of data to disk as quickly as possible. Run as a thread.
+void write_to_disk(
+    int fd,
+    size_t image_size_bytes,
+    deque<uint8_t *> &frame_deque,
+    deque<uint8_t *> &unused_frame_deque)
+{
+    while (true)
+    {
+        unique_lock<mutex> frame_deque_lock(frame_deque_mutex);
+        if (frame_deque.empty() == false)
+        {
+            uint8_t *frame_buffer = frame_deque.back();
+            frame_deque.pop_back();
+            frame_deque_lock.unlock();
+            ssize_t n = write(fd, frame_buffer, image_size_bytes);
+            if (n < 0)
+            {
+                err(1, "write failed");
+            }
+            else if (n != image_size_bytes)
+            {
+                err(1, "write incomplete (%zd/%zu)", n, image_size_bytes);
+            }
+            unique_lock<mutex> unused_frame_deque_lock(unused_frame_deque_mutex);
+            unused_frame_deque.push_front(frame_buffer);
+            unused_frame_deque_lock.unlock();
+        }
+        else
+        {
+            frame_deque_lock.unlock();
+            usleep(1000);
+        }
+    }
+}
 
 int main()
 {
@@ -139,6 +183,15 @@ int main()
         err(1, "open(%s) failed", FILE_NAME);
     }
 
+    // start thread for writing frame data to disk
+    thread write_to_disk_thread(
+        write_to_disk,
+        fd,
+        image_size_bytes,
+        ref(frame_deque),
+        ref(unused_frame_deque)
+    );
+
     asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)
     {
@@ -150,13 +203,16 @@ int main()
     int time1 = GetTickCount();
     while (true)
     {
+        unique_lock<mutex> unused_frame_deque_lock(unused_frame_deque_mutex);
         if (unused_frame_deque.empty())
         {
-            printf("Frame buffer pool exhausted.\n");
-            return 1;
+            unused_frame_deque_lock.unlock();
+            usleep(1000);
+            continue;
         }
         uint8_t *frame_buffer = unused_frame_deque.back();
         unused_frame_deque.pop_back();
+        unused_frame_deque_lock.unlock();
         asi_rtn = ASIGetVideoData(CamInfo.CameraID, frame_buffer, image_size_bytes, 200);
         if (asi_rtn == ASI_SUCCESS)
         {
@@ -166,26 +222,9 @@ int main()
         {
             printf("GetVideoData failed with error code %d\n", (int)asi_rtn);
         }
+        unique_lock<mutex> frame_deque_lock(frame_deque_mutex);
         frame_deque.push_front(frame_buffer);
-
-        printf("The deque has %d frames, the pool has %d free buffers.\n", frame_deque.size(), unused_frame_deque.size());
-
-        if (frame_deque.empty() == false)
-        {
-            frame_buffer = frame_deque.back();
-            frame_deque.pop_back();
-            ssize_t n = write(fd, frame_buffer, image_size_bytes);
-            if (n < 0)
-            {
-                err(1, "write failed");
-            }
-            else if (n != image_size_bytes)
-            {
-                err(1, "write incomplete (%zd/%zu)", n, image_size_bytes);
-            }
-            unused_frame_deque.push_front(frame_buffer);
-        }
-
+        frame_deque_lock.unlock();
 
         int time2 = GetTickCount();
 
@@ -194,6 +233,11 @@ int main()
             int num_dropped_frames;
             ASIGetDroppedFrames(CamInfo.CameraID, &num_dropped_frames);
             printf("frame count: %d dropped frames: %d\n", frame_count, num_dropped_frames);
+            printf(
+                "The queue has %d frames, the pool has %d free buffers.\n",
+                frame_deque.size(),
+                unused_frame_deque.size()
+            );
             time1 = GetTickCount();
         }
     }
