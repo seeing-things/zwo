@@ -124,7 +124,7 @@ void write_to_disk(int fd)
 }
 
 
-void agc(ASI_CAMERA_INFO CamInfo)
+void agc()
 {
     static uint32_t hist[256];
 
@@ -311,7 +311,7 @@ int main()
     static thread write_to_disk_thread(write_to_disk, fd);
 
     // start thread for AGC
-    static thread agc_thread(agc, CamInfo);
+    static thread agc_thread(agc);
 
     asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)
