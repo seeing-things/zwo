@@ -154,6 +154,8 @@ void write_to_disk(int fd)
         frame->decrRefCount();
     }
 
+    (void)close(fd);
+
     printf("Disk thread ending.\n");
 }
 
