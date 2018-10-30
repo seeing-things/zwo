@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <csignal>
 #include <deque>
 #include <thread>
 #include <mutex>
@@ -19,6 +20,9 @@
 extern unsigned long GetTickCount();
 
 using namespace std;
+
+// All threads should end gracefully when this is true
+atomic_bool end_program = false;
 
 // AGC outputs
 atomic_int gain = 0;
@@ -109,16 +113,29 @@ private:
 size_t Frame::IMAGE_SIZE_BYTES = 0;
 
 
+void sigint_handler(int signal)
+{
+    end_program = true;
+    to_disk_deque_cv.notify_one();
+    to_agc_deque_cv.notify_one();
+    unused_deque_cv.notify_one();
+}
+
+
 // Writes frames of data to disk as quickly as possible. Run as a thread.
 void write_to_disk(int fd)
 {
     printf("disk thread id: %ld\n", syscall(SYS_gettid));
 
-    while (true)
+    while (!end_program)
     {
         // Get next frame from deque
         unique_lock<mutex> to_disk_deque_lock(to_disk_deque_mutex);
-        to_disk_deque_cv.wait(to_disk_deque_lock, [&]{return !to_disk_deque.empty();});
+        to_disk_deque_cv.wait(to_disk_deque_lock, [&]{return !to_disk_deque.empty() || end_program;});
+        if (end_program)
+        {
+            break;
+        }
         Frame *frame = to_disk_deque.back();
         to_disk_deque.pop_back();
         to_disk_deque_lock.unlock();
@@ -136,6 +153,8 @@ void write_to_disk(int fd)
 
         frame->decrRefCount();
     }
+
+    printf("Disk thread ending.\n");
 }
 
 
@@ -145,11 +164,15 @@ void agc()
 
     printf("gain thread id: %ld\n", syscall(SYS_gettid));
 
-    while (true)
+    while (!end_program)
     {
         // Get frame from deque
         unique_lock<mutex> to_agc_deque_lock(to_agc_deque_mutex);
-        to_agc_deque_cv.wait(to_agc_deque_lock, [&]{return !to_agc_deque.empty();});
+        to_agc_deque_cv.wait(to_agc_deque_lock, [&]{return !to_agc_deque.empty() || end_program;});
+        if (end_program)
+        {
+            break;
+        }
         while (to_agc_deque.size() > 1)
         {
             // Discard all but most recent frame
@@ -197,6 +220,8 @@ void agc()
             printf("gain: %d\n", new_gain);
         }
     }
+
+    printf("AGC thread ending.\n");
 }
 
 
@@ -206,6 +231,8 @@ int main()
     ASI_CAMERA_INFO CamInfo;
 
     constexpr int AGC_PERIOD_MS = 100;
+
+    signal(SIGINT, sigint_handler);
 
     printf("main thread id: %ld\n", syscall(SYS_gettid));
 
@@ -318,14 +345,18 @@ int main()
     int frame_count = 0;
     int time1 = GetTickCount();
     int agc_last_dispatch_ts = GetTickCount();
-    while (true)
+    while (!end_program)
     {
         // Get pointer to an available Frame object
         unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
-        while (unused_deque.empty())
+        while (unused_deque.empty() && !end_program)
         {
             warnx("Frame pool exhausted. :( Frames will likely be dropped.\n");
             unused_deque_cv.wait(unused_deque_lock);
+        }
+        if (end_program)
+        {
+            break;
         }
         Frame *frame = unused_deque.back();
         unused_deque.pop_back();
@@ -400,12 +431,15 @@ int main()
         }
     }
 
-    // this is currently unreachable but keeping it since it shows the proper way to shut down
+    printf("Main thread cleaning up.\n");
+
     ASIStopVideoCapture(CamInfo.CameraID);
     ASICloseCamera(CamInfo.CameraID);
 
-    // TODO: implement SIGINT handler maybe
-    // TODO: explicitly join() threads on exit (requires signalling them in some manner)
+    write_to_disk_thread.join();
+    agc_thread.join();
+
+    printf("Main thread ending.\n");
 
     return 0;
 }
