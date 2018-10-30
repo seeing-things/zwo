@@ -388,9 +388,7 @@ int main()
         if (time2 - time1 > 1000)
         {
             int num_dropped_frames;
-            {
-                ASIGetDroppedFrames(CamInfo.CameraID, &num_dropped_frames);
-            }
+            ASIGetDroppedFrames(CamInfo.CameraID, &num_dropped_frames);
             printf("Frame count: %06d, Dropped frames: %06d\n", frame_count, num_dropped_frames);
             printf(
                 "To-disk queue: %zu frames, to-AGC queue: %zu frames, pool: %zu free frames.\n",
