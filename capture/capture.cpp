@@ -44,11 +44,14 @@ deque<Frame *> unused_deque;
 class Frame
 {
 public:
-    Frame(size_t image_size_bytes) :
-        image_size_bytes_(image_size_bytes),
+    Frame() :
         ref_count_(0)
     {
-        frame_buffer_ = new uint8_t[image_size_bytes];
+        if (IMAGE_SIZE_BYTES == 0)
+        {
+            errx(1, "Frame: IMAGE_SIZE_BYTES must be set to a non-zero value before construction");
+        }
+        frame_buffer_ = new uint8_t[IMAGE_SIZE_BYTES];
         unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
         unused_deque.push_front(this);
         unused_deque_lock.unlock();
@@ -93,15 +96,17 @@ public:
         }
     }
 
-    const size_t image_size_bytes_;
-    // TODO: this ptr should probably be const to guarantee that threads can't step on each other
-    // WRT the data; use a const_cast in a method or something for the data initialization
-    uint8_t *frame_buffer_;
+    // Must be initialized before first object is constructed
+    static size_t IMAGE_SIZE_BYTES;
+
+    // Raw image data from camera
+    const uint8_t *frame_buffer_;
 
 private:
     std::atomic_int ref_count_;
     std::mutex decr_mutex_;
 };
+size_t Frame::IMAGE_SIZE_BYTES = 0;
 
 
 // Writes frames of data to disk as quickly as possible. Run as a thread.
@@ -119,14 +124,14 @@ void write_to_disk(int fd)
         to_disk_deque_lock.unlock();
 
         // Write frame data to disk
-        ssize_t n = write(fd, frame->frame_buffer_, frame->image_size_bytes_);
+        ssize_t n = write(fd, frame->frame_buffer_, Frame::IMAGE_SIZE_BYTES);
         if (n < 0)
         {
             err(1, "write failed");
         }
-        else if (n != static_cast<ssize_t>(frame->image_size_bytes_))
+        else if (n != static_cast<ssize_t>(Frame::IMAGE_SIZE_BYTES))
         {
-            err(1, "write incomplete (%zd/%zu)", n, frame->image_size_bytes_);
+            err(1, "write incomplete (%zd/%zu)", n, Frame::IMAGE_SIZE_BYTES);
         }
 
         frame->decrRefCount();
@@ -160,7 +165,7 @@ void agc()
 
         // Generate histogram
         uint8_t max_val = 0;
-        for (size_t i = 0; i < frame->image_size_bytes_; i++)
+        for (size_t i = 0; i < Frame::IMAGE_SIZE_BYTES; i++)
         {
             uint8_t pixel_val = frame->frame_buffer_[i];
             max_val = std::max(max_val, pixel_val);
@@ -201,9 +206,6 @@ int main()
     ASI_CAMERA_INFO CamInfo;
 
     constexpr int AGC_PERIOD_MS = 100;
-    constexpr int width = 3096;
-    constexpr int height = 2080;
-    constexpr ASI_IMG_TYPE image_type = ASI_IMG_RAW8;
 
     printf("main thread id: %ld\n", syscall(SYS_gettid));
 
@@ -233,7 +235,13 @@ int main()
         errx(1, "InitCamera error: %d", (int)asi_rtn);
     }
 
-    asi_rtn = ASISetROIFormat(CamInfo.CameraID, width, height, 1, image_type);
+    asi_rtn = ASISetROIFormat(
+        CamInfo.CameraID,
+        CamInfo.MaxWidth,
+        CamInfo.MaxHeight,
+        1,
+        ASI_IMG_RAW8
+    );
     if (asi_rtn != ASI_SUCCESS)
     {
         errx(1, "SetROIFormat error: %d", (int)asi_rtn);
@@ -288,27 +296,14 @@ int main()
         errx(1, "SetControlValue error for ASI_WB_R: %d", (int)asi_rtn);
     }
 
-    size_t image_size_bytes;
-    switch (image_type)
-    {
-        case ASI_IMG_RAW16:
-            image_size_bytes = width * height * 2;
-            break;
-        case ASI_IMG_RGB24:
-            image_size_bytes = width * height * 3;
-            break;
-        default:
-            image_size_bytes = width * height;
-    }
-    printf("Each frame contains %zu bytes\n", image_size_bytes);
-
     // Create pool of frame buffers
+    Frame::IMAGE_SIZE_BYTES = CamInfo.MaxWidth * CamInfo.MaxHeight;
     constexpr size_t FRAME_POOL_SIZE = 64;
     static deque<Frame> frames;
     for(size_t i = 0; i < FRAME_POOL_SIZE; i++)
     {
         // Frame objects add themselves to unused_deque on construction
-        frames.emplace_back(image_size_bytes);
+        frames.emplace_back();
     }
 
     constexpr char FILE_NAME[] = "/home/rgottula/Desktop/test.bin";
@@ -364,8 +359,8 @@ int main()
         // Populate frame buffer with data from camera
         asi_rtn = ASIGetVideoData(
             CamInfo.CameraID,
-            frame->frame_buffer_,
-            frame->image_size_bytes_,
+            const_cast<uint8_t *>(frame->frame_buffer_),
+            Frame::IMAGE_SIZE_BYTES,
             200
         );
         if (asi_rtn == ASI_SUCCESS)
