@@ -331,7 +331,7 @@ int main()
         unused_deque.pop_back();
         unused_deque_lock.unlock();
 
-        // Matching decrement in write_to_disk thread
+        // Matching decrement in write_to_disk thread (except in case of failure to get frame data)
         frame->incrRefCount();
 
         // Set camera gain if value was updated by AGC thread
@@ -356,31 +356,32 @@ int main()
         if (asi_rtn == ASI_SUCCESS)
         {
             frame_count++;
+
+            // Dispatch a subset of frames to AGC thread
+            int now_ts = GetTickCount();
+            if (now_ts - agc_last_dispatch_ts > AGC_PERIOD_MS)
+            {
+                agc_last_dispatch_ts = now_ts;
+
+                // Put this frame in the deque headed for AGC thread
+                frame->incrRefCount();
+                unique_lock<mutex> to_agc_deque_lock(to_agc_deque_mutex);
+                to_agc_deque.push_front(frame);
+                to_agc_deque_lock.unlock();
+                to_agc_deque_cv.notify_one();
+            }
+
+            // Put this frame in the deque headed for write to disk thread
+            unique_lock<mutex> to_disk_deque_lock(to_disk_deque_mutex);
+            to_disk_deque.push_front(frame);
+            to_disk_deque_lock.unlock();
+            to_disk_deque_cv.notify_one();
         }
         else
         {
             warnx("GetVideoData failed with error code %d", (int)asi_rtn);
+            frame->decrRefCount();
         }
-
-        // Dispatch a subset of frames to AGC thread
-        int now_ts = GetTickCount();
-        if (now_ts - agc_last_dispatch_ts > AGC_PERIOD_MS)
-        {
-            agc_last_dispatch_ts = now_ts;
-
-            // Put this frame in the deque headed for AGC thread
-            frame->incrRefCount();
-            unique_lock<mutex> to_agc_deque_lock(to_agc_deque_mutex);
-            to_agc_deque.push_front(frame);
-            to_agc_deque_lock.unlock();
-            to_agc_deque_cv.notify_one();
-        }
-
-        // Put this frame in the deque headed for write to disk thread
-        unique_lock<mutex> to_disk_deque_lock(to_disk_deque_mutex);
-        to_disk_deque.push_front(frame);
-        to_disk_deque_lock.unlock();
-        to_disk_deque_cv.notify_one();
 
         int time2 = GetTickCount();
 
