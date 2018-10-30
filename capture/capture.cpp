@@ -184,8 +184,6 @@ void agc()
         {
             printf("gain: %d\n", new_gain);
         }
-
-        printf("gain: deque has %zu elements\n", to_agc_deque.size());
     }
 }
 
@@ -353,8 +351,6 @@ int main()
             }
 
             gain_updated = false;
-
-            printf("gain updated!\n");
         }
 
         // Populate frame buffer with data from camera
