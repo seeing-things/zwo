@@ -8,9 +8,12 @@
 #include <condition_variable>
 #include <algorithm>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/syscall.h>
 #include <fcntl.h>
 #include <err.h>
 #include "ASICamera2.h"
+
 
 // Defined by libASICamera2, returns a tick in milliseconds.
 extern unsigned long GetTickCount();
@@ -104,6 +107,8 @@ private:
 // Writes frames of data to disk as quickly as possible. Run as a thread.
 void write_to_disk(int fd)
 {
+    printf("disk thread id: %ld\n", syscall(SYS_gettid));
+
     while (true)
     {
         // Get next frame from deque
@@ -132,6 +137,8 @@ void write_to_disk(int fd)
 void agc()
 {
     static uint32_t hist[256];
+
+    printf("gain thread id: %ld\n", syscall(SYS_gettid));
 
     while (true)
     {
@@ -198,6 +205,7 @@ int main()
     constexpr int height = 2080;
     constexpr ASI_IMG_TYPE image_type = ASI_IMG_RAW8;
 
+    printf("main thread id: %ld\n", syscall(SYS_gettid));
 
     int numDevices = ASIGetNumOfConnectedCameras();
     if (numDevices <= 0)
