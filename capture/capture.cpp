@@ -5,6 +5,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <condition_variable>
 #include <algorithm>
 #include <unistd.h>
 #include <fcntl.h>
@@ -16,24 +17,35 @@ extern unsigned long GetTickCount();
 
 using namespace std;
 
-// std::deque is not thread safe
-mutex frame_deque_mutex;
-mutex unused_frame_deque_mutex;
+// AGC outputs
+atomic_int gain = 0;
+atomic_bool gain_updated = false;
 
-// ASICamera2 API is not known to be thread-safe
-mutex asi_mutex;
+// std::deque is not thread safe
+mutex to_disk_deque_mutex;
+mutex to_agc_deque_mutex;
+mutex unused_deque_mutex;
+
+condition_variable to_disk_deque_cv;
+condition_variable to_agc_deque_cv;
+
+class Frame;
+
+// FIFOs holding pointers to frame objects
+deque<Frame *> to_disk_deque;
+deque<Frame *> to_agc_deque;
+deque<Frame *> unused_deque;
 
 
 class Frame
 {
 public:
-    Frame(size_t image_size_bytes, deque<Frame *> *unused_frame_deque) :
+    Frame(size_t image_size_bytes) :
         image_size_bytes_(image_size_bytes),
-        unused_frame_deque_(unused_frame_deque),
         ref_count_(0)
     {
         frame_buffer_ = new uint8_t[image_size_bytes];
-        unused_frame_deque_->push_front(this);
+        unused_deque.push_front(this);
     }
 
     // Explicit: no copy or move construction or assignment
@@ -67,9 +79,9 @@ public:
 
         if (ref_count_ == 0)
         {
-            unique_lock<mutex> unused_frame_deque_lock(unused_frame_deque_mutex);
-            unused_frame_deque_->push_front(this);
-            unused_frame_deque_lock.unlock();
+            unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
+            unused_deque.push_front(this);
+            unused_deque_lock.unlock();
         }
     }
 
@@ -79,89 +91,57 @@ public:
     uint8_t *frame_buffer_;
 
 private:
-    deque<Frame *> * const unused_frame_deque_;
     std::atomic_int ref_count_;
     std::mutex decr_mutex_;
 };
 
 
 // Writes frames of data to disk as quickly as possible. Run as a thread.
-void write_to_disk(
-    int fd,
-    deque<Frame *> &frame_deque)
+void write_to_disk(int fd)
 {
-    // TODO: this should really use a condition variable and wait on that, instead of polling every
-    // 1 millisecond, so that it can write out the frame IMMEDIATELY, as soon as possible
     while (true)
     {
-        unique_lock<mutex> frame_deque_lock(frame_deque_mutex);
-        if (frame_deque.empty())
+        // Get next frame from deque
+        unique_lock<mutex> to_disk_deque_lock(to_disk_deque_mutex);
+        to_disk_deque_cv.wait(to_disk_deque_lock, [&]{return !to_disk_deque.empty();});
+        Frame *frame = to_disk_deque.back();
+        to_disk_deque.pop_back();
+        to_disk_deque_lock.unlock();
+
+        // Write frame data to disk
+        ssize_t n = write(fd, frame->frame_buffer_, frame->image_size_bytes_);
+        if (n < 0)
         {
-            frame_deque_lock.unlock();
-            usleep(1000);
+            err(1, "write failed");
         }
-        else
+        else if (n != static_cast<ssize_t>(frame->image_size_bytes_))
         {
-            Frame *frame = frame_deque.back();
-            frame_deque_lock.unlock();
-            ssize_t n = write(fd, frame->frame_buffer_, frame->image_size_bytes_);
-            if (n < 0)
-            {
-                err(1, "write failed");
-            }
-            else if (n != static_cast<ssize_t>(frame->image_size_bytes_))
-            {
-                err(1, "write incomplete (%zd/%zu)", n, frame->image_size_bytes_);
-            }
-            frame_deque_lock.lock();
-            frame_deque.pop_back();
-            frame_deque_lock.unlock();
-            frame->decrRefCount();
+            err(1, "write incomplete (%zd/%zu)", n, frame->image_size_bytes_);
         }
+
+        frame->decrRefCount();
     }
 }
 
 
-void agc(
-    ASI_CAMERA_INFO CamInfo,
-    deque<Frame *> &frame_deque)
+void agc(ASI_CAMERA_INFO CamInfo)
 {
     static uint32_t hist[256];
-    int gain = 0;
-
-    /*
-     * Initialize camera gain. Will be adjusted dynamically by this control loop. The ZWO driver's
-     * auto gain feature is disabled.
-     */
-    unique_lock<mutex> asi_lock(asi_mutex);
-    ASI_ERROR_CODE asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
-    asi_lock.unlock();
-    if (asi_rtn != ASI_SUCCESS)
-    {
-        warnx("SetControlValue error for ASI_GAIN: %d", (int)asi_rtn);
-    }
 
     while (true)
     {
-        usleep(100'000);
-
-        unique_lock<mutex> frame_deque_lock(frame_deque_mutex);
-        if (frame_deque.empty())
+        // Get frame from deque
+        unique_lock<mutex> to_agc_deque_lock(to_agc_deque_mutex);
+        to_agc_deque_cv.wait(to_agc_deque_lock, [&]{return !to_agc_deque.empty();});
+        while (to_agc_deque.size() > 1)
         {
-            // no frames available to look at
-            frame_deque_lock.unlock();
-            printf("AGC: no frames available!\n");
-            continue;
+            // Discard all but most recent frame
+            to_agc_deque.back()->decrRefCount();
+            to_agc_deque.pop_back();
         }
-
-        /*
-         * Grab pointer to the most recent frame. Increment reference count *before* releasing
-         * deque mutex to ensure that the write_to_disk thread can't decrement the reference count
-         * before it is incremented here.
-         */
-        Frame *frame = frame_deque.front();
-        frame->incrRefCount();
-        frame_deque_lock.unlock();
+        Frame *frame = to_agc_deque.back();
+        to_agc_deque.pop_back();
+        to_agc_deque_lock.unlock();
 
         // Clear histogram array
         memset(hist, 0, sizeof(hist));
@@ -178,31 +158,29 @@ void agc(
 
         // Adjust gain
         int old_gain = gain;
+        int new_gain = gain;
         if (max_val == 255)
         {
-            gain--;
+            new_gain--;
         }
         else if (max_val < 240)
         {
-            gain++;
+            new_gain++;
         }
-        gain = clamp(gain, 0, 510);
+        new_gain = clamp(new_gain, 0, 510);
 
-        if (gain != old_gain)
+        if (new_gain != old_gain)
         {
-            printf("gain: %d %c\n", gain, (gain > old_gain ? '+' : '-'));
-            asi_lock.lock();
-            asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
-            asi_lock.unlock();
-            if (asi_rtn != ASI_SUCCESS)
-            {
-                warnx("SetControlValue error for ASI_GAIN: %d", (int)asi_rtn);
-            }
+            gain = new_gain;
+            gain_updated = true;
+            printf("gain: %d %c\n", new_gain, (new_gain > old_gain ? '+' : '-'));
         }
         else
         {
-            printf("gain: %d\n", gain);
+            printf("gain: %d\n", new_gain);
         }
+
+        printf("gain: deque has %zu elements\n", to_agc_deque.size());
     }
 }
 
@@ -212,84 +190,91 @@ int main()
     ASI_ERROR_CODE asi_rtn;
     ASI_CAMERA_INFO CamInfo;
 
+    constexpr int AGC_PERIOD_MS = 100;
     constexpr int width = 3096;
     constexpr int height = 2080;
     constexpr ASI_IMG_TYPE image_type = ASI_IMG_RAW8;
 
+
+    int numDevices = ASIGetNumOfConnectedCameras();
+    if (numDevices <= 0)
     {
-        // Hold the ASI mutex during camera initialization
-        lock_guard<mutex> asi_lock(asi_mutex);
+        errx(1, "No cameras connected.");
+    }
+    else
+    {
+        printf("Found %d cameras, first of these selected.\n", numDevices);
+    }
 
-        int numDevices = ASIGetNumOfConnectedCameras();
-        if (numDevices <= 0)
-        {
-            errx(1, "No cameras connected.");
-        }
-        else
-        {
-            printf("Found %d cameras, first of these selected.\n", numDevices);
-        }
+    // Select the first camera
+    int cam_index = 0;
+    ASIGetCameraProperty(&CamInfo, cam_index);
 
-        // Select the first camera
-        int cam_index = 0;
-        ASIGetCameraProperty(&CamInfo, cam_index);
+    asi_rtn = ASIOpenCamera(CamInfo.CameraID);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "OpenCamera error: %d", (int)asi_rtn);
+    }
 
-        asi_rtn = ASIOpenCamera(CamInfo.CameraID);
-        if (asi_rtn != ASI_SUCCESS)
-        {
-            errx(1, "OpenCamera error: %d", (int)asi_rtn);
-        }
+    asi_rtn = ASIInitCamera(CamInfo.CameraID);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "InitCamera error: %d", (int)asi_rtn);
+    }
 
-        asi_rtn = ASIInitCamera(CamInfo.CameraID);
-        if (asi_rtn != ASI_SUCCESS)
-        {
-            errx(1, "InitCamera error: %d", (int)asi_rtn);
-        }
+    asi_rtn = ASISetROIFormat(CamInfo.CameraID, width, height, 1, image_type);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "SetROIFormat error: %d", (int)asi_rtn);
+    }
 
-        asi_rtn = ASISetROIFormat(CamInfo.CameraID, width, height, 1, image_type);
-        if (asi_rtn != ASI_SUCCESS)
-        {
-            errx(1, "SetROIFormat error: %d", (int)asi_rtn);
-        }
+    /*
+     * Initialize camera gain. Will be adjusted dynamically by the AGC loop. The ZWO driver's
+     * auto gain feature is disabled.
+     */
+    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "SetControlValue error for ASI_GAIN: %d", (int)asi_rtn);
+    }
 
-        /*
-         * Exposure time initialized to 16.667 ms. Will be adjusted dynamically with the custom AGC
-         * loop in this capture software. The built-in ZWO auto exposure feature is disabled.
-         */
-        asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_EXPOSURE, 16667, ASI_FALSE);
-        if (asi_rtn != ASI_SUCCESS)
-        {
-            errx(1, "SetControlValue error for ASI_EXPOSURE: %d", (int)asi_rtn);
-        }
+    /*
+     * Exposure time initialized to 16.667 ms. Will be adjusted dynamically with the custom AGC
+     * loop in this capture software. The built-in ZWO auto exposure feature is disabled.
+     */
+    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_EXPOSURE, 16667, ASI_FALSE);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "SetControlValue error for ASI_EXPOSURE: %d", (int)asi_rtn);
+    }
 
-        /*
-         * Experimentation has shown that the highest value for the BANDWIDTHOVERLOAD parameter that
-         * results in stable performance is 94 for the ASI178MC camera and the PC hardware / OS in use.
-         * Higher values result in excessive dropped frames.
-         */
-        asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_BANDWIDTHOVERLOAD, 94, ASI_FALSE);
-        if (asi_rtn != ASI_SUCCESS)
-        {
-            errx(1, "SetControlValue error for ASI_BANDWIDTHOVERLOAD: %d", (int)asi_rtn);
-        }
+    /*
+     * Experimentation has shown that the highest value for the BANDWIDTHOVERLOAD parameter that
+     * results in stable performance is 94 for the ASI178MC camera and the PC hardware / OS in use.
+     * Higher values result in excessive dropped frames.
+     */
+    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_BANDWIDTHOVERLOAD, 94, ASI_FALSE);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "SetControlValue error for ASI_BANDWIDTHOVERLOAD: %d", (int)asi_rtn);
+    }
 
-        asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_HIGH_SPEED_MODE, 1, ASI_FALSE);
-        if (asi_rtn != ASI_SUCCESS)
-        {
-            errx(1, "SetControlValue error for ASI_HIGH_SPEED_MODE: %d", (int)asi_rtn);
-        }
+    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_HIGH_SPEED_MODE, 1, ASI_FALSE);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "SetControlValue error for ASI_HIGH_SPEED_MODE: %d", (int)asi_rtn);
+    }
 
-        asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_WB_B, 90, ASI_FALSE);
-        if (asi_rtn != ASI_SUCCESS)
-        {
-            errx(1, "SetControlValue error for ASI_WB_B: %d", (int)asi_rtn);
-        }
+    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_WB_B, 90, ASI_FALSE);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "SetControlValue error for ASI_WB_B: %d", (int)asi_rtn);
+    }
 
-        asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_WB_R, 48, ASI_FALSE);
-        if (asi_rtn != ASI_SUCCESS)
-        {
-            errx(1, "SetControlValue error for ASI_WB_R: %d", (int)asi_rtn);
-        }
+    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_WB_R, 48, ASI_FALSE);
+    if (asi_rtn != ASI_SUCCESS)
+    {
+        errx(1, "SetControlValue error for ASI_WB_R: %d", (int)asi_rtn);
     }
 
     size_t image_size_bytes;
@@ -306,17 +291,13 @@ int main()
     }
     printf("Each frame contains %zu bytes\n", image_size_bytes);
 
-    // FIFOs holding pointers to frame objects
-    static deque<Frame *> unused_frame_deque;
-    static deque<Frame *> frame_deque;
-
     // Create pool of frame buffers
     constexpr size_t FRAME_POOL_SIZE = 64;
     static deque<Frame> frames;
     for(size_t i = 0; i < FRAME_POOL_SIZE; i++)
     {
-        // Frame objects add themselves to unused_frame_deque on construction
-        frames.emplace_back(image_size_bytes, &unused_frame_deque);
+        // Frame objects add themselves to unused_deque on construction
+        frames.emplace_back(image_size_bytes);
     }
 
     constexpr char FILE_NAME[] = "/home/rgottula/Desktop/test.bin";
@@ -327,23 +308,12 @@ int main()
     }
 
     // start thread for writing frame data to disk
-    static thread write_to_disk_thread(
-        write_to_disk,
-        fd,
-        ref(frame_deque)
-    );
+    static thread write_to_disk_thread(write_to_disk, fd);
 
     // start thread for AGC
-    static thread agc_thread(
-        agc,
-        CamInfo,
-        ref(frame_deque)
-    );
+    static thread agc_thread(agc, CamInfo);
 
-    {
-        lock_guard<mutex> asi_lock(asi_mutex);
-        asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);
-    }
+    asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)
     {
         errx(1, "StartVideoCapture error: %d", (int)asi_rtn);
@@ -351,34 +321,45 @@ int main()
 
     int frame_count = 0;
     int time1 = GetTickCount();
+    int agc_last_dispatch_ts = GetTickCount();
     while (true)
     {
         // Get pointer to an available Frame object
-        unique_lock<mutex> unused_frame_deque_lock(unused_frame_deque_mutex);
-        if (unused_frame_deque.empty())
+        unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
+        if (unused_deque.empty())
         {
-            unused_frame_deque_lock.unlock();
+            unused_deque_lock.unlock();
             // TODO: use condition variable signalling here too
             usleep(1000);
             continue;
         }
-        Frame *frame = unused_frame_deque.back();
-        unused_frame_deque.pop_back();
-        unused_frame_deque_lock.unlock();
+        Frame *frame = unused_deque.back();
+        unused_deque.pop_back();
+        unused_deque_lock.unlock();
 
         // Matching decrement in write_to_disk thread
         frame->incrRefCount();
 
         // Populate frame buffer with data from camera
+        if (gain_updated)
         {
-            lock_guard<mutex> asi_lock(asi_mutex);
-            asi_rtn = ASIGetVideoData(
-                CamInfo.CameraID,
-                frame->frame_buffer_,
-                frame->image_size_bytes_,
-                200
-            );
+            asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
+            if (asi_rtn != ASI_SUCCESS)
+            {
+                warnx("SetControlValue error for ASI_GAIN: %d", (int)asi_rtn);
+            }
+
+            gain_updated = false;
+
+            printf("gain updated!\n");
         }
+
+        asi_rtn = ASIGetVideoData(
+            CamInfo.CameraID,
+            frame->frame_buffer_,
+            frame->image_size_bytes_,
+            200
+        );
         if (asi_rtn == ASI_SUCCESS)
         {
             frame_count++;
@@ -388,10 +369,24 @@ int main()
             warnx("GetVideoData failed with error code %d", (int)asi_rtn);
         }
 
+        int now_ts = GetTickCount();
+        if (now_ts - agc_last_dispatch_ts > AGC_PERIOD_MS)
+        {
+            agc_last_dispatch_ts = now_ts;
+
+            // Put this frame in the deque headed for AGC thread
+            frame->incrRefCount();
+            unique_lock<mutex> to_agc_deque_lock(to_agc_deque_mutex);
+            to_agc_deque.push_front(frame);
+            to_agc_deque_lock.unlock();
+            to_agc_deque_cv.notify_one();
+        }
+
         // Put this frame in the deque headed for write to disk thread
-        unique_lock<mutex> frame_deque_lock(frame_deque_mutex);
-        frame_deque.push_front(frame);
-        frame_deque_lock.unlock();
+        unique_lock<mutex> to_disk_deque_lock(to_disk_deque_mutex);
+        to_disk_deque.push_front(frame);
+        to_disk_deque_lock.unlock();
+        to_disk_deque_cv.notify_one();
 
         int time2 = GetTickCount();
 
@@ -399,25 +394,22 @@ int main()
         {
             int num_dropped_frames;
             {
-                lock_guard<mutex> asi_lock(asi_mutex);
                 ASIGetDroppedFrames(CamInfo.CameraID, &num_dropped_frames);
             }
-            printf("frame count: %d dropped frames: %d\n", frame_count, num_dropped_frames);
+            printf("Frame count: %06d, Dropped frames: %06d\n", frame_count, num_dropped_frames);
             printf(
-                "The queue has %zu frames, the pool has %zu free buffers.\n",
-                frame_deque.size(),
-                unused_frame_deque.size()
+                "To-disk queue: %zu frames, to-AGC queue: %zu frames, pool: %zu free frames.\n",
+                to_disk_deque.size(),
+                to_agc_deque.size(),
+                unused_deque.size()
             );
             time1 = GetTickCount();
         }
     }
 
     // this is currently unreachable but keeping it since it shows the proper way to shut down
-    {
-        lock_guard<mutex> asi_lock(asi_mutex);
-        ASIStopVideoCapture(CamInfo.CameraID);
-        ASICloseCamera(CamInfo.CameraID);
-    }
+    ASIStopVideoCapture(CamInfo.CameraID);
+    ASICloseCamera(CamInfo.CameraID);
 
     // TODO: implement SIGINT handler maybe
     // TODO: explicitly join() threads on exit (requires signalling them in some manner)
