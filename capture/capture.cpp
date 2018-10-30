@@ -28,6 +28,7 @@ mutex unused_deque_mutex;
 
 condition_variable to_disk_deque_cv;
 condition_variable to_agc_deque_cv;
+condition_variable unused_deque_cv;
 
 class Frame;
 
@@ -45,7 +46,10 @@ public:
         ref_count_(0)
     {
         frame_buffer_ = new uint8_t[image_size_bytes];
+        unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
         unused_deque.push_front(this);
+        unused_deque_lock.unlock();
+        unused_deque_cv.notify_one();
     }
 
     // Explicit: no copy or move construction or assignment
@@ -82,6 +86,7 @@ public:
             unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
             unused_deque.push_front(this);
             unused_deque_lock.unlock();
+            unused_deque_cv.notify_one();
         }
     }
 
@@ -326,12 +331,10 @@ int main()
     {
         // Get pointer to an available Frame object
         unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
-        if (unused_deque.empty())
+        while (unused_deque.empty())
         {
-            unused_deque_lock.unlock();
-            // TODO: use condition variable signalling here too
-            usleep(1000);
-            continue;
+            warnx("Frame pool exhausted. :( Frames will likely be dropped.\n");
+            unused_deque_cv.wait(unused_deque_lock);
         }
         Frame *frame = unused_deque.back();
         unused_deque.pop_back();
@@ -340,7 +343,7 @@ int main()
         // Matching decrement in write_to_disk thread
         frame->incrRefCount();
 
-        // Populate frame buffer with data from camera
+        // Set camera gain if value was updated by AGC thread
         if (gain_updated)
         {
             asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
@@ -354,6 +357,7 @@ int main()
             printf("gain updated!\n");
         }
 
+        // Populate frame buffer with data from camera
         asi_rtn = ASIGetVideoData(
             CamInfo.CameraID,
             frame->frame_buffer_,
@@ -369,6 +373,7 @@ int main()
             warnx("GetVideoData failed with error code %d", (int)asi_rtn);
         }
 
+        // Dispatch a subset of frames to AGC thread
         int now_ts = GetTickCount();
         if (now_ts - agc_last_dispatch_ts > AGC_PERIOD_MS)
         {
