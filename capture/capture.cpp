@@ -22,7 +22,7 @@ using namespace std;
 
 // AGC outputs
 atomic_int gain = 0;
-atomic_bool gain_updated = false;
+atomic_bool gain_updated = true; // true so camera gain is set as soon as possible after startup
 
 // std::deque is not thread safe
 mutex to_disk_deque_mutex;
@@ -245,16 +245,6 @@ int main()
     if (asi_rtn != ASI_SUCCESS)
     {
         errx(1, "SetROIFormat error: %d", (int)asi_rtn);
-    }
-
-    /*
-     * Initialize camera gain. Will be adjusted dynamically by the AGC loop. The ZWO driver's
-     * auto gain feature is disabled.
-     */
-    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
-    if (asi_rtn != ASI_SUCCESS)
-    {
-        errx(1, "SetControlValue error for ASI_GAIN: %d", (int)asi_rtn);
     }
 
     /*
