@@ -47,6 +47,40 @@ deque<Frame *> to_agc_deque;
 deque<Frame *> unused_deque;
 
 
+static const char *asi_error_str(ASI_ERROR_CODE code)
+{
+    switch (code)
+    {
+#define _ASI_ERROR_STR(_code) case _code: return #_code
+    _ASI_ERROR_STR(ASI_SUCCESS);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_INDEX);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_ID);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_CONTROL_TYPE);
+    _ASI_ERROR_STR(ASI_ERROR_CAMERA_CLOSED);
+    _ASI_ERROR_STR(ASI_ERROR_CAMERA_REMOVED);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_PATH);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_FILEFORMAT);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_SIZE);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_IMGTYPE);
+    _ASI_ERROR_STR(ASI_ERROR_OUTOF_BOUNDARY);
+    _ASI_ERROR_STR(ASI_ERROR_TIMEOUT);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_SEQUENCE);
+    _ASI_ERROR_STR(ASI_ERROR_BUFFER_TOO_SMALL);
+    _ASI_ERROR_STR(ASI_ERROR_VIDEO_MODE_ACTIVE);
+    _ASI_ERROR_STR(ASI_ERROR_EXPOSURE_IN_PROGRESS);
+    _ASI_ERROR_STR(ASI_ERROR_GENERAL_ERROR);
+    _ASI_ERROR_STR(ASI_ERROR_INVALID_MODE);
+#undef _ASI_ERROR_STR
+
+    case ASI_ERROR_END: break;
+    }
+
+    static thread_local char buf[128];
+    snprintf(buf, sizeof(buf), "(ASI_ERROR_CODE)%d", (int)code);
+    return buf;
+}
+
+
 class Frame
 {
 public:
@@ -292,13 +326,13 @@ int main()
     asi_rtn = ASIOpenCamera(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)
     {
-        errx(1, "OpenCamera error: %d", (int)asi_rtn);
+        errx(1, "OpenCamera error: %s", asi_error_str(asi_rtn));
     }
 
     asi_rtn = ASIInitCamera(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)
     {
-        errx(1, "InitCamera error: %d", (int)asi_rtn);
+        errx(1, "InitCamera error: %s", asi_error_str(asi_rtn));
     }
 
     asi_rtn = ASISetROIFormat(
@@ -310,7 +344,7 @@ int main()
     );
     if (asi_rtn != ASI_SUCCESS)
     {
-        errx(1, "SetROIFormat error: %d", (int)asi_rtn);
+        errx(1, "SetROIFormat error: %s", asi_error_str(asi_rtn));
     }
 
     /*
@@ -321,25 +355,25 @@ int main()
     asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_BANDWIDTHOVERLOAD, 94, ASI_FALSE);
     if (asi_rtn != ASI_SUCCESS)
     {
-        errx(1, "SetControlValue error for ASI_BANDWIDTHOVERLOAD: %d", (int)asi_rtn);
+        errx(1, "SetControlValue error for ASI_BANDWIDTHOVERLOAD: %s", asi_error_str(asi_rtn));
     }
 
     asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_HIGH_SPEED_MODE, 1, ASI_FALSE);
     if (asi_rtn != ASI_SUCCESS)
     {
-        errx(1, "SetControlValue error for ASI_HIGH_SPEED_MODE: %d", (int)asi_rtn);
+        errx(1, "SetControlValue error for ASI_HIGH_SPEED_MODE: %s", asi_error_str(asi_rtn));
     }
 
     asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_WB_B, 90, ASI_FALSE);
     if (asi_rtn != ASI_SUCCESS)
     {
-        errx(1, "SetControlValue error for ASI_WB_B: %d", (int)asi_rtn);
+        errx(1, "SetControlValue error for ASI_WB_B: %s", asi_error_str(asi_rtn));
     }
 
     asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_WB_R, 48, ASI_FALSE);
     if (asi_rtn != ASI_SUCCESS)
     {
-        errx(1, "SetControlValue error for ASI_WB_R: %d", (int)asi_rtn);
+        errx(1, "SetControlValue error for ASI_WB_R: %s", asi_error_str(asi_rtn));
     }
 
     // Create pool of frame buffers
@@ -368,7 +402,7 @@ int main()
     asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)
     {
-        errx(1, "StartVideoCapture error: %d", (int)asi_rtn);
+        errx(1, "StartVideoCapture error: %s", asi_error_str(asi_rtn));
     }
 
     int frame_count = 0;
@@ -400,7 +434,7 @@ int main()
             asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
             if (asi_rtn != ASI_SUCCESS)
             {
-                warnx("SetControlValue error for ASI_GAIN: %d", (int)asi_rtn);
+                warnx("SetControlValue error for ASI_GAIN: %s", asi_error_str(asi_rtn));
             }
 
             gain_updated = false;
@@ -412,7 +446,7 @@ int main()
             asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_EXPOSURE, exposure_us, ASI_FALSE);
             if (asi_rtn != ASI_SUCCESS)
             {
-                errx(1, "SetControlValue error for ASI_EXPOSURE: %d", (int)asi_rtn);
+                errx(1, "SetControlValue error for ASI_EXPOSURE: %s", asi_error_str(asi_rtn));
             }
         }
 
@@ -449,7 +483,7 @@ int main()
         }
         else
         {
-            warnx("GetVideoData failed with error code %d", (int)asi_rtn);
+            warnx("GetVideoData failed with error code %s", asi_error_str(asi_rtn));
             frame->decrRefCount();
         }
 
