@@ -26,7 +26,9 @@ atomic_bool end_program = false;
 
 // AGC outputs
 atomic_int gain = 0;
-atomic_bool gain_updated = true; // true so camera gain is set as soon as possible after startup
+atomic_bool gain_updated = false;
+atomic_int exposure_us = 0;
+atomic_bool exposure_updated = false;
 
 // std::deque is not thread safe
 mutex to_disk_deque_mutex;
@@ -162,7 +164,18 @@ void write_to_disk(int fd)
 
 void agc()
 {
+    constexpr int GAIN_MIN = 0;
+    constexpr int GAIN_MAX = 510; // 510 is the maximum value for this camera
+    constexpr int EXPOSURE_MIN_US = 32; // 32 is the minimum value for this camera
+    constexpr int EXPOSURE_MAX_US = 16'667; // Max for ~60 FPS
+
     static uint32_t hist[256];
+
+    /*
+     * The AGC directly servos this variable which has range [0.0, 1.0]. The camera gain and
+     * exposure time are both functions of this value.
+     */
+    static double agc_value = 0.0;
 
     printf("gain thread id: %ld\n", syscall(SYS_gettid));
 
@@ -189,38 +202,62 @@ void agc()
         memset(hist, 0, sizeof(hist));
 
         // Generate histogram
-        uint8_t max_val = 0;
         for (size_t i = 0; i < Frame::IMAGE_SIZE_BYTES; i++)
         {
             uint8_t pixel_val = frame->frame_buffer_[i];
-            max_val = std::max(max_val, pixel_val);
             hist[pixel_val]++;
         }
         frame->decrRefCount();
 
-        // Adjust gain
-        int old_gain = gain;
-        int new_gain = gain;
-        if (max_val == 255)
+        // Calculate Nth percentile pixel value
+        constexpr float percentile = 0.999;
+        uint32_t integral_threshold = (uint32_t)((1.0 - percentile) * Frame::IMAGE_SIZE_BYTES);
+        uint8_t upper_tail_val = 255;
+        uint32_t integral = hist[upper_tail_val];;
+        while (integral < integral_threshold)
         {
-            new_gain--;
+            upper_tail_val--;
+            integral += hist[upper_tail_val];
         }
-        else if (max_val < 240)
-        {
-            new_gain++;
-        }
-        new_gain = clamp(new_gain, 0, 510);
 
-        if (new_gain != old_gain)
+        // Adjust AGC
+        if (upper_tail_val >= 250)
         {
+            agc_value -= 0.01;
+        }
+        else if (upper_tail_val < 230)
+        {
+            agc_value += 0.01;
+        }
+        agc_value = clamp(agc_value, 0.0, 1.0);
+
+        printf("AGC value: %.3f, upper tail value: %03d", agc_value, upper_tail_val);
+
+        // derive new camera gain
+        int new_gain = clamp((int)(4.0 * GAIN_MAX * agc_value - (3.0 * GAIN_MAX)), GAIN_MIN, GAIN_MAX);
+        printf(", gain: %03d", new_gain);
+        if (new_gain != gain)
+        {
+            printf(" %c", (new_gain > gain ? '+' : '-'));
             gain = new_gain;
             gain_updated = true;
-            printf("gain: %d %c\n", new_gain, (new_gain > old_gain ? '+' : '-'));
         }
-        else
+
+        // derive new camera exposure time
+        int new_exposure_us = clamp(
+            (int)(4.0 / 3.0 * EXPOSURE_MAX_US * agc_value),
+            EXPOSURE_MIN_US,
+            EXPOSURE_MAX_US
+        );
+        printf(", exposure: %05.2f ms", (float)new_exposure_us / 1.0e3);
+        if (new_exposure_us != exposure_us)
         {
-            printf("gain: %d\n", new_gain);
+            printf(" %c", (new_exposure_us > exposure_us ? '+' : '-'));
+            exposure_us = new_exposure_us;
+            exposure_updated = true;
         }
+
+        printf("\n");
     }
 
     printf("AGC thread ending.\n");
@@ -274,16 +311,6 @@ int main()
     if (asi_rtn != ASI_SUCCESS)
     {
         errx(1, "SetROIFormat error: %d", (int)asi_rtn);
-    }
-
-    /*
-     * Exposure time initialized to 16.667 ms. Will be adjusted dynamically with the custom AGC
-     * loop in this capture software. The built-in ZWO auto exposure feature is disabled.
-     */
-    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_EXPOSURE, 16667, ASI_FALSE);
-    if (asi_rtn != ASI_SUCCESS)
-    {
-        errx(1, "SetControlValue error for ASI_EXPOSURE: %d", (int)asi_rtn);
     }
 
     /*
@@ -353,7 +380,7 @@ int main()
         unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
         while (unused_deque.empty() && !end_program)
         {
-            warnx("Frame pool exhausted. :( Frames will likely be dropped.\n");
+            warnx("Frame pool exhausted. :( Frames will likely be dropped.");
             unused_deque_cv.wait(unused_deque_lock);
         }
         if (end_program)
@@ -377,6 +404,16 @@ int main()
             }
 
             gain_updated = false;
+        }
+
+        // Set exposure time if value was updated by AGC thread
+        if (exposure_updated)
+        {
+            asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_EXPOSURE, exposure_us, ASI_FALSE);
+            if (asi_rtn != ASI_SUCCESS)
+            {
+                errx(1, "SetControlValue error for ASI_EXPOSURE: %d", (int)asi_rtn);
+            }
         }
 
         // Populate frame buffer with data from camera
