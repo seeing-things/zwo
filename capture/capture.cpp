@@ -4,6 +4,7 @@
 #include <csignal>
 #include <deque>
 #include <thread>
+#include <pthread.h>
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
@@ -50,6 +51,17 @@ deque<Frame *> to_disk_deque;
 deque<Frame *> to_preview_deque;
 deque<Frame *> to_agc_deque;
 deque<Frame *> unused_deque;
+
+
+static void set_thread_priority(pthread_t thread, int policy, int priority)
+{
+    sched_param sch_params;
+    sch_params.sched_priority = priority;
+    if (pthread_setschedparam(thread, policy, &sch_params))
+    {
+        err(1, "Failed to set thread priority");
+    }
+}
 
 
 static const char *asi_error_str(ASI_ERROR_CODE code)
@@ -368,6 +380,12 @@ int main()
 
     printf("main thread id: %ld\n", syscall(SYS_gettid));
 
+    /*
+     * Set real-time priority for the main thread. All threads created later, including by the ASI
+     * library, will inherit this priority.
+     */
+    set_thread_priority(pthread_self(), SCHED_RR, 10);
+
     int numDevices = ASIGetNumOfConnectedCameras();
     if (numDevices <= 0)
     {
@@ -452,10 +470,15 @@ int main()
         err(1, "open(%s) failed", FILE_NAME);
     }
 
-    // start threads
+    // Start threads
     static thread write_to_disk_thread(write_to_disk, fd);
     static thread preview_thread(preview);
     static thread agc_thread(agc);
+
+    // These threads do not need real-time priority
+    set_thread_priority(preview_thread.native_handle(), SCHED_OTHER, 0);
+    set_thread_priority(agc_thread.native_handle(), SCHED_OTHER, 0);
+
 
     asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)
