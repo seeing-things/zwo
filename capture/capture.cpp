@@ -371,7 +371,7 @@ public:
         int hours;
         int minutes;
         sscanf(tz_str, "%3d%2d", &hours, &minutes);
-        return hours * 3600 + minutes;
+        return 3600 * hours + 60 * minutes;
     }
 
 
