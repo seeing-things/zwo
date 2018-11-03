@@ -354,7 +354,7 @@ private:
         using namespace std::chrono;
 
         /*
-         * Number of seconds from the Visual Basic Date data type to the Unix time epoch. The
+         * Number of ticks from the Visual Basic Date data type to the Unix time epoch. The
          * VB Date type is the number of "ticks" since Jan 1, year 0001 in the Gregorian calendar,
          * where each tick is 100 ns.
          */
