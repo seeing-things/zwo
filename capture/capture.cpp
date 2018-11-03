@@ -10,6 +10,7 @@
 #include <condition_variable>
 #include <algorithm>
 #include <unistd.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <fcntl.h>
@@ -166,6 +167,217 @@ private:
 size_t Frame::IMAGE_SIZE_BYTES = 0;
 
 
+enum SERColorID_t : int32_t
+{
+    MONO = 0,
+    BAYER_RGGB = 8,
+    BAYER_GRBG = 9,
+    BAYER_GBRG = 10,
+    BAYER_BGGR = 11,
+    BAYER_CYYM = 16,
+    BAYER_YCMY = 17,
+    BAYER_YMCY = 18,
+    BAYER_MYYC = 19,
+    RGB = 100,
+    BGR = 101
+};
+
+
+struct __attribute__ ((packed)) SERHeader_t
+{
+    // 1. This is a historical artifact of the SER format.
+    const char FileID[14] = {'L', 'U', 'C', 'A', 'M', '-', 'R', 'E', 'C', 'O', 'R', 'D', 'E', 'R'};
+
+    // 2. Unused field.
+    const int32_t LuID = 0;
+
+    // 3. Identifies how color information is encoded.
+    SERColorID_t ColorID = BAYER_RGGB;
+
+    // 4. Set to 1 if 16-bit image data is little-endian. 0 for big-endian.
+    int32_t LittleEndian = 0;
+
+    // 5. Width of every image in pixels.
+    int32_t ImageWidth = 0;
+
+    // 6. Height of every image in pixels.
+    int32_t ImageHeight = 0;
+
+    // 7. Number of bits per pixel per color plane (1-16).
+    int32_t PixelDepthPerPlane = 8;
+
+    // 8. Number of image frames in SER file.
+    int32_t FrameCount = 0;
+
+    // 9. Name of observer. 40 ASCII characters {32-126 dec.}, fill unused characters with 0 dec.
+    char Observer[40] = "";
+
+    // 10. Name of used camera. 40 ASCII characters {32-126 dec.}, fill unused characters with 0 dec.
+    char Instrument[40] = "";
+
+    // 11. Name of used telescope. 40 ASCII characters {32-126 dec.}, fill unused characters with 0 dec.
+    char Telescope[40] = "";
+
+    // 12. Start time of image stream (local time). Must be >= 0.
+    int64_t DateTime = 0;
+
+    // 13. Start time of image stream in UTC.
+    int64_t DateTime_UTC = 0;
+};
+
+
+class SERFile
+{
+public:
+    SERFile(
+        const char *filename,
+        int32_t width,
+        int32_t height,
+        SERColorID_t color_id = BAYER_RGGB,
+        int32_t bit_depth = 8,
+        const char *observer = "",
+        const char *instrument = "",
+        const char *telescope = "") :
+        UTC_OFFSET_S(utcOffset())
+    {
+        bytes_per_frame_ = width * height * ((bit_depth - 1) / 8 + 1);
+        if (color_id == RGB || color_id == BGR)
+        {
+            bytes_per_frame_ *= 3;
+        }
+
+        fd_ = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0644);
+        if (fd_ < 0)
+        {
+            err(1, "open(%s) failed", filename);
+        }
+
+        // Extend file size to length of header
+        if (ftruncate(fd_, sizeof(SERHeader_t)))
+        {
+            err(1, "could not extend file to make room for SER header");
+        }
+
+        // Reposition file descriptor offset past header
+        if (lseek(fd_, 0, SEEK_END) < 0)
+        {
+            err(1, "could not seek past header in SER file");
+        }
+
+        // Map the header portion of the file into memory
+        header_ = (SERHeader_t *)mmap(
+            0,
+            sizeof(SERHeader_t),
+            PROT_READ | PROT_WRITE,
+            MAP_SHARED,
+            fd_,
+            0
+        );
+        if (header_ == MAP_FAILED)
+        {
+            err(1, "mmap for SERFile header failed");
+        }
+
+        // Use placement new operator to init header to defaults in struct definition
+        new(header_) SERHeader_t;
+
+        // Init header values based on constructor args
+        header_->ImageWidth = width;
+        header_->ImageHeight = height;
+        header_->ColorID = color_id;
+        header_->PixelDepthPerPlane = bit_depth;
+        strncpy(header_->Observer, observer, 40);
+        strncpy(header_->Instrument, instrument, 40);
+        strncpy(header_->Telescope, telescope, 40);
+        makeTimestamps(&(header_->DateTime_UTC), &(header_->DateTime));
+    }
+
+    ~SERFile()
+    {
+        if (munmap(header_, sizeof(SERHeader_t)))
+        {
+            err(1, "munmap for SERFile header failed");
+        }
+        (void)close(fd_);
+    }
+
+    void addFrame(Frame &frame)
+    {
+        if (bytes_per_frame_ != Frame::IMAGE_SIZE_BYTES)
+        {
+            errx(
+                1,
+                "frame size %zu bytes does not match expected size %zu bytes",
+                Frame::IMAGE_SIZE_BYTES,
+                bytes_per_frame_
+            );
+        }
+
+        ssize_t n = write(fd_, frame.frame_buffer_, bytes_per_frame_);
+        if (n < 0)
+        {
+            err(1, "write failed");
+        }
+        else if (n != static_cast<ssize_t>(bytes_per_frame_))
+        {
+            err(1, "write incomplete (%zd/%zu)", n, bytes_per_frame_);
+        }
+
+        header_->FrameCount++;
+    }
+
+    static int64_t utcOffset()
+    {
+        /*
+         * Returns the UTC offset in seconds. This requires ugly methods because the standard
+         * libraries as of 2018 do not provide a straightforward way to get this information.
+         */
+        time_t t = time(nullptr);
+        tm *local_time = localtime(&t);
+        char tz_str[16];
+        strftime(tz_str, 16, "%z", local_time);
+        int hours;
+        int minutes;
+        sscanf(tz_str, "%3d%2d", &hours, &minutes);
+        return hours * 3600 + minutes;
+    }
+
+
+private:
+    const int64_t UTC_OFFSET_S;
+    SERHeader_t *header_;
+    int fd_;
+    size_t bytes_per_frame_;
+
+    void makeTimestamps(int64_t *utc, int64_t *local)
+    {
+        using namespace std::chrono;
+
+        /*
+         * Number of seconds from the Visual Basic Date data type to the Unix time epoch. The
+         * VB Date type is the number of "ticks" since Jan 1, year 0001 in the Gregorian calendar,
+         * where each tick is 100 ns.
+         */
+        constexpr int64_t VB_DATE_TICKS_TO_UNIX_EPOCH = 621'355'968'000'000'000LL;
+        constexpr int64_t VB_DATE_TICKS_PER_SEC = 10'000'000LL;
+
+        system_clock::time_point now = system_clock::now();
+        int64_t ns_since_epoch = duration_cast<nanoseconds>(now.time_since_epoch()).count();
+
+        int64_t utc_tick = (ns_since_epoch / 100) + VB_DATE_TICKS_TO_UNIX_EPOCH;
+        if (utc != nullptr)
+        {
+            *utc = utc_tick;
+        }
+
+        if (local != nullptr)
+        {
+            *local = utc_tick + UTC_OFFSET_S * VB_DATE_TICKS_PER_SEC;
+        }
+    }
+};
+
+
 void sigint_handler(int signal)
 {
     end_program = true;
@@ -177,9 +389,14 @@ void sigint_handler(int signal)
 
 
 // Writes frames of data to disk as quickly as possible. Run as a thread.
-void write_to_disk(int fd)
+void write_to_disk(
+    const char *filename,
+    int32_t image_width,
+    int32_t image_height)
 {
     printf("disk thread id: %ld\n", syscall(SYS_gettid));
+
+    SERFile ser_file(filename, image_width, image_height, BAYER_RGGB, 8, "", "ZWO ASI178MC", "");
 
     while (!end_program)
     {
@@ -194,21 +411,10 @@ void write_to_disk(int fd)
         to_disk_deque.pop_back();
         to_disk_deque_lock.unlock();
 
-        // Write frame data to disk
-        ssize_t n = write(fd, frame->frame_buffer_, Frame::IMAGE_SIZE_BYTES);
-        if (n < 0)
-        {
-            err(1, "write failed");
-        }
-        else if (n != static_cast<ssize_t>(Frame::IMAGE_SIZE_BYTES))
-        {
-            err(1, "write incomplete (%zd/%zu)", n, Frame::IMAGE_SIZE_BYTES);
-        }
+        ser_file.addFrame(*frame);
 
         frame->decrRefCount();
     }
-
-    (void)close(fd);
 
     printf("Disk thread ending.\n");
 }
@@ -369,7 +575,7 @@ void agc()
 }
 
 
-int main()
+int main(int argc, char *argv[])
 {
     ASI_ERROR_CODE asi_rtn;
     ASI_CAMERA_INFO CamInfo;
@@ -377,6 +583,11 @@ int main()
     constexpr int AGC_PERIOD_MS = 100;
 
     signal(SIGINT, sigint_handler);
+
+    if (argc < 2)
+    {
+        errx(1, "Usage: %s <output_filename>", argv[0]);
+    }
 
     printf("main thread id: %ld\n", syscall(SYS_gettid));
 
@@ -463,15 +674,13 @@ int main()
         frames.emplace_back();
     }
 
-    constexpr char FILE_NAME[] = "/home/rgottula/Desktop/test.bin";
-    int fd = open(FILE_NAME, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0)
-    {
-        err(1, "open(%s) failed", FILE_NAME);
-    }
-
     // Start threads
-    static thread write_to_disk_thread(write_to_disk, fd);
+    static thread write_to_disk_thread(
+        write_to_disk,
+        argv[1],
+        CamInfo.MaxWidth,
+        CamInfo.MaxHeight
+    );
     static thread preview_thread(preview);
     static thread agc_thread(agc);
 
