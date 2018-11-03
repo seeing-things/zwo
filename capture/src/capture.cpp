@@ -182,18 +182,6 @@ int main(int argc, char *argv[])
         errx(1, "SetControlValue error for ASI_HIGH_SPEED_MODE: %s", asi_error_str(asi_rtn));
     }
 
-    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_WB_B, 90, ASI_FALSE);
-    if (asi_rtn != ASI_SUCCESS)
-    {
-        errx(1, "SetControlValue error for ASI_WB_B: %s", asi_error_str(asi_rtn));
-    }
-
-    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_WB_R, 48, ASI_FALSE);
-    if (asi_rtn != ASI_SUCCESS)
-    {
-        errx(1, "SetControlValue error for ASI_WB_R: %s", asi_error_str(asi_rtn));
-    }
-
     // Create pool of frame buffers
     Frame::IMAGE_SIZE_BYTES = CamInfo.MaxWidth * CamInfo.MaxHeight;
     constexpr size_t FRAME_POOL_SIZE = 64;
