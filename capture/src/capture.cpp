@@ -18,6 +18,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include "ASICamera2.h"
+#include "Frame.h"
 
 
 // Defined by libASICamera2, returns a tick in milliseconds.
@@ -44,8 +45,6 @@ condition_variable to_disk_deque_cv;
 condition_variable to_preview_deque_cv;
 condition_variable to_agc_deque_cv;
 condition_variable unused_deque_cv;
-
-class Frame;
 
 // FIFOs holding pointers to frame objects
 deque<Frame *> to_disk_deque;
@@ -97,74 +96,6 @@ static const char *asi_error_str(ASI_ERROR_CODE code)
     snprintf(buf, sizeof(buf), "(ASI_ERROR_CODE)%d", (int)code);
     return buf;
 }
-
-
-class Frame
-{
-public:
-    Frame() :
-        ref_count_(0)
-    {
-        if (IMAGE_SIZE_BYTES == 0)
-        {
-            errx(1, "Frame: IMAGE_SIZE_BYTES must be set to a non-zero value before construction");
-        }
-        frame_buffer_ = new uint8_t[IMAGE_SIZE_BYTES];
-        unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
-        unused_deque.push_front(this);
-        unused_deque_lock.unlock();
-        unused_deque_cv.notify_one();
-    }
-
-    // Explicit: no copy or move construction or assignment
-    Frame(const Frame&)            = delete;
-    Frame(Frame&&)                 = delete;
-    Frame& operator=(const Frame&) = delete;
-    Frame& operator=(Frame&&)      = delete;
-
-    ~Frame()
-    {
-        delete [] frame_buffer_;
-    }
-
-    void incrRefCount()
-    {
-        // Assume this Frame object has already been removed from the unused frame deque
-        ref_count_++;
-    }
-
-    void decrRefCount()
-    {
-        // Ensure this function is reentrant
-        std::lock_guard<std::mutex> lock(decr_mutex_);
-
-        if (ref_count_ <= 0)
-        {
-            errx(1, "Frame.decrRefCount called on Frame where ref_count_ was already zero!");
-        }
-
-        ref_count_--;
-
-        if (ref_count_ == 0)
-        {
-            unique_lock<mutex> unused_deque_lock(unused_deque_mutex);
-            unused_deque.push_front(this);
-            unused_deque_lock.unlock();
-            unused_deque_cv.notify_one();
-        }
-    }
-
-    // Must be initialized before first object is constructed
-    static size_t IMAGE_SIZE_BYTES;
-
-    // Raw image data from camera
-    const uint8_t *frame_buffer_;
-
-private:
-    std::atomic_int ref_count_;
-    std::mutex decr_mutex_;
-};
-size_t Frame::IMAGE_SIZE_BYTES = 0;
 
 
 enum SERColorID_t : int32_t

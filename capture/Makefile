@@ -8,7 +8,7 @@ USB = -I../libusb/include  -L../libusb/$(platform) -lusb-1.0
 
 
 
-LIBSPATH = -L../linux_sdk/lib/$(platform) -I../linux_sdk/include
+LIBSPATH = -L../linux_sdk/lib/$(platform) -I../linux_sdk/include -I./include
 
 
 
@@ -31,9 +31,9 @@ endif
 
 all: bin/capture bin/write_benchmark
 
-bin/capture: capture.cpp
+bin/capture: src/Frame.cpp src/capture.cpp
 	mkdir -p bin
-	$(CC) $< -o $@ $(CFLAGS) $(OPENCV) -lASICamera2
+	$(CC) $^ -o $@ $(CFLAGS) $(OPENCV) -lASICamera2
 
 bin/write_benchmark: write_benchmark.cpp
 	mkdir -p bin
