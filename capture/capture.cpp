@@ -237,8 +237,11 @@ public:
         int32_t bit_depth = 8,
         const char *observer = "",
         const char *instrument = "",
-        const char *telescope = "") :
-        UTC_OFFSET_S(utcOffset())
+        const char *telescope = "",
+        bool add_trailer = true
+    ) :
+        UTC_OFFSET_S(utcOffset()),
+        add_trailer_(add_trailer)
     {
         bytes_per_frame_ = width * height * ((bit_depth - 1) / 8 + 1);
         if (color_id == RGB || color_id == BGR)
@@ -294,6 +297,28 @@ public:
 
     ~SERFile()
     {
+        if (add_trailer_)
+        {
+            if (header_->FrameCount != static_cast<int32_t>(frame_timestamps_.size()))
+            {
+                warnx("SERFile class frame count %d does not match timestamp vector size %zu",
+                    header_->FrameCount,
+                    frame_timestamps_.size()
+                );
+            }
+
+            size_t trailer_len_bytes = sizeof(int64_t) * frame_timestamps_.size();
+            ssize_t n = write(fd_, frame_timestamps_.data(), trailer_len_bytes);
+            if (n < 0)
+            {
+                err(1, "write failed");
+            }
+            else if (n != static_cast<ssize_t>(trailer_len_bytes))
+            {
+                err(1, "write incomplete (%zd/%zu)", n, trailer_len_bytes);
+            }
+        }
+
         if (munmap(header_, sizeof(SERHeader_t)))
         {
             err(1, "munmap for SERFile header failed");
@@ -311,6 +336,13 @@ public:
                 Frame::IMAGE_SIZE_BYTES,
                 bytes_per_frame_
             );
+        }
+
+        if (add_trailer_)
+        {
+            int64_t utc_timestamp;
+            makeTimestamps(&utc_timestamp, nullptr);
+            frame_timestamps_.push_back(utc_timestamp);
         }
 
         ssize_t n = write(fd_, frame.frame_buffer_, bytes_per_frame_);
@@ -348,6 +380,8 @@ private:
     SERHeader_t *header_;
     int fd_;
     size_t bytes_per_frame_;
+    bool add_trailer_;
+    vector<int64_t> frame_timestamps_;
 
     void makeTimestamps(int64_t *utc, int64_t *local)
     {
