@@ -187,7 +187,7 @@ void run_camera(ASI_CAMERA_INFO &CamInfo)
             asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_EXPOSURE, exposure_us, ASI_FALSE);
             if (asi_rtn != ASI_SUCCESS)
             {
-                errx(1, "SetControlValue error for ASI_EXPOSURE: %s", asi_error_str(asi_rtn));
+                warnx("SetControlValue error for ASI_EXPOSURE: %s", asi_error_str(asi_rtn));
             }
         }
 
