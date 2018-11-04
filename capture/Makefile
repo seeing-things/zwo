@@ -31,7 +31,7 @@ endif
 
 all: bin/capture bin/write_benchmark
 
-bin/capture: src/Frame.cpp src/SERFile.cpp src/agc.cpp src/disk.cpp src/preview.cpp src/capture.cpp
+bin/capture: src/Frame.cpp src/SERFile.cpp src/agc.cpp src/disk.cpp src/preview.cpp src/camera.cpp src/capture.cpp
 	mkdir -p bin
 	$(CC) $^ -o $@ $(CFLAGS) $(OPENCV) -lASICamera2
 
