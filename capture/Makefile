@@ -8,7 +8,7 @@ USB = -I../libusb/include  -L../libusb/$(platform) -lusb-1.0
 
 
 
-LIBSPATH = -L../linux_sdk/lib/$(platform) -I../linux_sdk/include -I./include
+LIBSPATH = -L../0.7.0503/linux_sdk/lib/$(platform) -I../linux_sdk/include -I./include
 
 
 
