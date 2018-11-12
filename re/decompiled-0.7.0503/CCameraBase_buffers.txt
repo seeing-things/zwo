@@ -1,0 +1,113 @@
+CCameraBase
+
+All of these are delete[]'d in CCameraBase's dtor. Sorted by order of deletion in the dtor.
+
+
++0x3F8 buf_128KiB_ptr
+  - CCameraBase ctor           set nullptr
+  - CCameraBase::InitVariable  new[] 128KiB
+  - CCameraBase::SetGamma      if not nullptr, writes to the memory
+  - CCameraS178MC::GetImage    used as second param in call to CAlgorithm::Gamma
+  - CCameraBase dtor           delete[] if not nullptr; then set nullptr
+
+
++0x4E4 darkbuf1_ptr
+  - CCameraBase ctor              set nullptr
+  - CCameraBase::UsingDark        delete[] if func param is false
+  - CCameraBase::DoGetDark        new[] (res_x*res_y) if field_508 nonzero; memset to zero
+  - CCameraBase::LoadBMPFromFile  new[] (res_x*res_y); deserialized from bitmap
+  - CCameraBase::AdjustDarkBuff   is exclusively read from
+  - CCameraBase::SaveBMPToFile    serialized out as bitmap
+  - CCameraBase::SaveHPCTable     is exclusively read from
+  - CCameraBase dtor              delete[] if not nullptr; then set nullptr
+
++0x4EC darkbuf2_ptr
+  - CCameraBase ctor              set nullptr
+  - CCameraBase::UsingDark        delete[] if func param is false
+  - CCameraBase::DoGetDark        new[] (res_x*res_y) if field_508 nonzero; contents uninitialized
+  - CCameraBase::LoadBMPFromFile  new[] (res_x*res_y); contents uninitialized
+  - CCameraBase::AdjustDarkBuff   is memset to zero; then modified extensively
+  - CCameraBase::SubtractDark     used as last param in call to CAlgorithm::SubtractDark (it is only read from therein)
+  - CCameraBase dtor              delete[] if not nullptr; then set nullptr
+
+
++0x51C
+  - TODO: search immediate offsets
+  - ...
+  - CCameraBase dtor  delete[] if not nullptr; then set nullptr
+
+
++0x4AC buf1_ptr
+  - new[] (res_x*res_y) CCameraBase::InitVariable
+  - TODO: search immediate offsets
+  - ...
+  - CCameraBase dtor  delete[] if not nullptr; then set nullptr
+
++0x4B4 buf2_ptr
+  - new[] (res_x*res_y) CCameraBase::InitVariable
+  - TODO: search immediate offsets
+  - ...
+  - CCameraBase dtor  delete[] if not nullptr; then set nullptr
+
+
++0x4BC
+  - TODO: search immediate offsets
+  - ...
+  - CCameraBase dtor  delete[] if not nullptr; then set nullptr
+
++0x4C4
+  - TODO: search immediate offsets
+  - ...
+  - CCameraBase dtor  delete[] if not nullptr; then set nullptr
+
++0x404
+  - TODO: search immediate offsets
+  - ...
+  - CCameraBase dtor  delete[] if not nullptr; then set nullptr
+
+
++0x538 TODO:NEW_NAME [prev: 'buf3_ptr']
+  This is the buffer sent to libusb for the bulk xfers and which is then inserted into the CirBuf etc
+  - CCameraBase ctor           set nullptr
+  - CCameraBase::InitVariable  new[] (res_x*res_y); contents uninitialized
+  - SetGainExpFunc             used as ptr for CCameraBase::AutoExpGain (is exclusively read from)
+  - SetGainExpFunc             used as ptr for CCameraBase::AutoWhiBal (is exclusively read from)
+  - WorkingFunc                used as xfer_buf ptr for CCameraFX3::initAsyncXfer
+  - WorkingFunc                used as buf ptr for CirBuf::InsertBuff
+  - WorkingFunc                is read from and written to a little bit
+  - WorkingFunc                used as ptr for CCameraBase::AutoExpGain (is exclusively read from)
+  - WorkingFunc                used as ptr for CCameraBase::AutoWhiBal (is exclusively read from)
+  - CCameraBase dtor           delete[] if not nullptr; then set nullptr
+
++0x540 TODO:NEW_NAME [prev: 'buf4_ptr']
+  This buffer is used literally nowhere.
+  - CCameraBase ctor           set nullptr
+  - CCameraBase::InitVariable  new[] (res_x*res_y); contents uninitialized
+  - CCameraBase dtor           delete[] if not nullptr; then set nullptr
+
++0x528 TODO:NEW_NAME [prev: 'buf5_ptr']
+  This is the buffer used by CCameraS178MC::GetImage to get the CirBuf data; do processing of various sorts; and then copy out to the user
+  - CCameraBase ctor             set nullptr
+  - CCameraBase::InitVariable    new[] (res_x*res_y); contents uninitialized
+  - CCameraS178MC::GetImage      used as dest ptr for CirBuf::ReadBuff; has processing done on it; then copied to output ptr
+  - CCameraBase::HandleHotPixels is read from and written to (called via CCameraS178MC::GetImage)
+  - CCameraBase::DeNoiseHPC      is read from and written to (called via CCameraBase::HandleHotPixels, via CCameraS178MC::GetImage)
+  - CCameraBase::DoGetDark       is read from and data is used to populate darkbuf1_ptr (called via CCameraS178MC::GetImage)
+  - CAlgorithm::SubtractDark     is written to based on data from darkbuf2_ptr
+  - CCameraBase dtor             delete[] if not nullptr; then set nullptr
+
+
++0x69C
+  - TODO: search immediate offsets
+  - ...
+  - CCameraBase dtor  delete[] if not nullptr; then set nullptr
+
++0x060
+  - TODO: search immediate offsets
+  - ...
+  - CCameraBase dtor  delete[] if not nullptr; then set nullptr
+
+
+MUTEXES:
++0x40C: protects ptr +0x51C?
++0x434: protects ptr +0x404?
