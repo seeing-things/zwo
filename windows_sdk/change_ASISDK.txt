@@ -1,4 +1,4 @@
-V1, 13, 0523 2018.5.23
+V0, 7, 0503 2018.5.3
 Add support for ASI120MM-Mini
 Fix issue with ASI1600: pattern in image,  no image under high USB traffic and 16bit 
 Fix bug with 294:  HPC take no effect under ROI

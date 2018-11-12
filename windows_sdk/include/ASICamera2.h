@@ -736,7 +736,7 @@ ASICAMERA_API ASI_ERROR_CODE ASIGetGainOffset(int iCameraID, int *pOffset_Highes
 
 /***************************************************************************
 Descriptions£º
-get version string, like "1, 13, 0523"
+get version string, like "0, 7, 0503"
 ***************************************************************************/
 ASICAMERA_API char* ASIGetSDKVersion();
 
