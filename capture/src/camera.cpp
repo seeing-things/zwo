@@ -13,6 +13,9 @@
 // All threads should end gracefully when this is true
 extern std::atomic_bool end_program;
 
+// AGC enable state
+extern std::atomic_bool agc_enabled;
+
 // AGC outputs
 extern std::atomic_int gain;
 extern std::atomic_bool gain_updated;
@@ -203,17 +206,20 @@ void run_camera(ASI_CAMERA_INFO &CamInfo)
             frame_count++;
 
             // Dispatch a subset of frames to AGC thread
-            int now_ts = GetTickCount();
-            if (now_ts - agc_last_dispatch_ts > AGC_PERIOD_MS)
+            if (agc_enabled)
             {
-                agc_last_dispatch_ts = now_ts;
+                int now_ts = GetTickCount();
+                if (now_ts - agc_last_dispatch_ts > AGC_PERIOD_MS)
+                {
+                    agc_last_dispatch_ts = now_ts;
 
-                // Put this frame in the deque headed for AGC thread
-                frame->incrRefCount();
-                std::unique_lock<std::mutex> to_agc_deque_lock(to_agc_deque_mutex);
-                to_agc_deque.push_front(frame);
-                to_agc_deque_lock.unlock();
-                to_agc_deque_cv.notify_one();
+                    // Put this frame in the deque headed for AGC thread
+                    frame->incrRefCount();
+                    std::unique_lock<std::mutex> to_agc_deque_lock(to_agc_deque_mutex);
+                    to_agc_deque.push_front(frame);
+                    to_agc_deque_lock.unlock();
+                    to_agc_deque_cv.notify_one();
+                }
             }
 
             // Put this frame in the deque headed for live preview thread if the deque is empty

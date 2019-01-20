@@ -1,4 +1,5 @@
 #include "preview.h"
+#include <cmath>
 #include <deque>
 #include <atomic>
 #include <mutex>
@@ -8,13 +9,102 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include "Frame.h"
+#include "camera.h"
 
 
 extern std::atomic_bool end_program;
 
+// AGC enable state
+extern std::atomic_bool agc_enabled;
+
+// AGC outputs (possibly under manual control here)
+extern std::atomic_int gain;
+extern std::atomic_bool gain_updated;
+extern std::atomic_int exposure_us;
+extern std::atomic_bool exposure_updated;
+
 extern std::mutex to_preview_deque_mutex;
 extern std::condition_variable to_preview_deque_cv;
 extern std::deque<Frame *> to_preview_deque;
+
+// trackbar positions
+int gain_trackbar_pos = 0;
+int exposure_trackbar_pos = 32;
+
+
+void make_histogram(cv::Mat &src)
+{
+    using namespace cv;
+
+    // Quantize to 256 levels
+    int histSize[] = {256};
+
+    // Pixel values range from 0 to 255
+    float pranges[] = { 0, 256 };
+    const float* ranges[] = { pranges };
+    MatND hist;
+
+    // compute the histogram from the 0-th channel
+    int channels[] = {0};
+    calcHist(&src, 1, channels, Mat(), hist, 1, histSize, ranges, true, false);
+
+    // plot histogram on logarithmic y-axis
+    double maxVal = log10(2080*3096);
+    int scale = 2;
+    int height = 256;
+    Mat histImg = Mat::zeros(height, 256*scale, CV_8UC3);
+    for (int i = 0; i < 256; i++)
+    {
+        float binVal = hist.at<float>(i);
+        float logBinVal = (binVal > 0) ? log10(binVal) : 0.0;
+        rectangle(
+            histImg,
+            Point(i*scale, (int)(height * (1.0 - logBinVal / maxVal))),
+            Point( (i+1)*scale - 1, height-1),
+            Scalar::all(255),
+            -1
+        );
+    }
+    imshow("Histogram", histImg);
+}
+
+
+void gain_trackbar_callback(int pos, void *userdata)
+{
+    gain_trackbar_pos = std::clamp(pos, GAIN_MIN, GAIN_MAX);
+
+    // Gain under manual control
+    if (!agc_enabled)
+    {
+        gain = pos;
+        gain_updated = true;
+    }
+}
+
+void exposure_trackbar_callback(int pos, void *userdata)
+{
+    exposure_trackbar_pos = std::clamp(pos, EXPOSURE_MIN_US, EXPOSURE_MAX_US);
+
+    // Exposure time under manual control
+    if (!agc_enabled)
+    {
+        exposure_us = pos;
+        exposure_updated = true;
+    }
+}
+
+void agc_mode_trackbar_callback(int pos, void *userdata)
+{
+    // AGC is being disabled so update gain and exposure time to trackbar positions
+    if (agc_enabled == true && pos == 1)
+    {
+        gain = gain_trackbar_pos;
+        gain_updated = true;
+        exposure_us = exposure_trackbar_pos;
+        exposure_updated = true;
+    }
+    agc_enabled = (pos == 1) ? true : false;
+}
 
 
 void preview()
@@ -25,6 +115,34 @@ void preview()
 
     cv::namedWindow(WINDOW_NAME, cv::WINDOW_NORMAL);
     cv::resizeWindow(WINDOW_NAME, 640, 480);
+    cv::namedWindow("Histogram", 1);
+
+    cv::createTrackbar(
+        "agc mode",
+        "Histogram",
+        nullptr,
+        1,
+        agc_mode_trackbar_callback,
+        nullptr
+    );
+
+    cv::createTrackbar(
+        "gain",
+        "Histogram",
+        &gain_trackbar_pos,
+        GAIN_MAX,
+        gain_trackbar_callback,
+        nullptr
+    );
+
+    cv::createTrackbar(
+        "exposure time",
+        "Histogram",
+        &exposure_trackbar_pos,
+        EXPOSURE_MAX_US,
+        exposure_trackbar_callback,
+        nullptr
+    );
 
     while (!end_program)
     {
@@ -61,9 +179,15 @@ void preview()
         }
 
         cv::Mat img_bayer_bg(2080, 3096, CV_8UC1, (void *)(frame->frame_buffer_));
+
+        // Show color image in a window
         cv::Mat img_bgr;
         cv::cvtColor(img_bayer_bg, img_bgr, CV_BayerBG2BGR);
         cv::imshow(WINDOW_NAME, img_bgr);
+
+        // Display histogram
+        make_histogram(img_bayer_bg);
+
         cv::waitKey(1);
 
         frame->decrRefCount();

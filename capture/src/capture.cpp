@@ -24,6 +24,9 @@
 // All threads should end gracefully when this is true
 std::atomic_bool end_program = false;
 
+// AGC enable state
+std::atomic_bool agc_enabled = false;
+
 // AGC outputs
 std::atomic_int gain = 0;
 std::atomic_bool gain_updated = false;

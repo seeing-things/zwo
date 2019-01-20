@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include "Frame.h"
+#include "camera.h"
 
 
 extern std::atomic_bool end_program;
@@ -33,11 +34,6 @@ extern std::deque<Frame *> to_agc_deque;
  */
 void agc()
 {
-    constexpr int GAIN_MIN = 0;
-    constexpr int GAIN_MAX = 510; // 510 is the maximum value for this camera
-    constexpr int EXPOSURE_MIN_US = 32; // 32 is the minimum value for this camera
-    constexpr int EXPOSURE_MAX_US = 16'667; // Max for ~60 FPS
-
     static uint32_t hist[256];
 
     /*
