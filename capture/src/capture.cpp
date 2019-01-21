@@ -80,11 +80,6 @@ int main(int argc, char *argv[])
 {
     signal(SIGINT, sigint_handler);
 
-    if (argc < 2)
-    {
-        errx(1, "Usage: %s <output_filename>", argv[0]);
-    }
-
     printf("main thread id: %ld\n", syscall(SYS_gettid));
 
     /*
@@ -109,7 +104,7 @@ int main(int argc, char *argv[])
     // Start threads
     static std::thread write_to_disk_thread(
         write_to_disk,
-        argv[1],
+        (argc > 1) ? (argv[1]) : (nullptr),
         CamInfo.MaxWidth,
         CamInfo.MaxHeight
     );

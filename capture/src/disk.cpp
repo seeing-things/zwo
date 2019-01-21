@@ -24,7 +24,19 @@ void write_to_disk(
 {
     printf("disk thread id: %ld\n", syscall(SYS_gettid));
 
-    SERFile ser_file(filename, image_width, image_height, BAYER_RGGB, 8, "", "ZWO ASI178MC", "");
+    std::unique_ptr<SERFile> ser_file;
+
+    bool disk_write_enabled = filename != nullptr;
+    if (disk_write_enabled)
+    {
+        ser_file.reset(
+            new SERFile(filename, image_width, image_height, BAYER_RGGB, 8, "", "ZWO ASI178MC", "")
+        );
+    }
+    else
+    {
+        printf("Warning: No filename provided; not writing to disk!\n");
+    }
 
     while (!end_program)
     {
@@ -39,7 +51,10 @@ void write_to_disk(
         to_disk_deque.pop_back();
         to_disk_deque_lock.unlock();
 
-        ser_file.addFrame(*frame);
+        if (disk_write_enabled)
+        {
+            ser_file->addFrame(*frame);
+        }
 
         frame->decrRefCount();
     }
