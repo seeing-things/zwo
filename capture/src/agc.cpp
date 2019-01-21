@@ -75,18 +75,18 @@ void agc()
         frame->decrRefCount();
 
         // Calculate Nth percentile pixel value
-        constexpr float percentile = 0.999;
+        constexpr float percentile = 1.0;
         uint32_t integral_threshold = (uint32_t)((1.0 - percentile) * Frame::IMAGE_SIZE_BYTES);
         uint8_t upper_tail_val = 255;
         uint32_t integral = hist[upper_tail_val];;
-        while (integral < integral_threshold)
+        while (integral <= integral_threshold)
         {
             upper_tail_val--;
             integral += hist[upper_tail_val];
         }
 
         // Adjust AGC
-        if (upper_tail_val >= 250)
+        if (upper_tail_val >= 255)
         {
             agc_value -= 0.01;
         }
