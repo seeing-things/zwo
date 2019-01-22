@@ -26,5 +26,5 @@ all: libzwo_fixer.so
 clean:
 	-rm -f libzwo_fixer.so
 
-libzwo_fixer.so: zwo_fixer.cpp zwo_fixer.hpp Makefile
+libzwo_fixer.so: zwo_fixer.cpp zwo_fixer.hpp internal.hpp Makefile
 	g++ $(CXXFLAGS) -o $@ $<
