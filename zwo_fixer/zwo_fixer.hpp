@@ -51,7 +51,7 @@
 
 // Linux =======================================================================
 
-uintptr_t PageSize()
+inline uintptr_t PageSize()
 {
 	static auto page_size = (uintptr_t)sysconf(_SC_PAGESIZE);
 	return page_size;
@@ -335,18 +335,18 @@ static inline const uintptr_t libASICamera2_base = FindLibBaseAddr("libASICamera
 
 #else
 
-#error unsupported version
+#error zwo_fixer does not support this version of libASICamera2
 
 #endif
 
 
-void (*callbackUSBTransferComplete)(struct libusb_transfer *) = reinterpret_cast<decltype(callbackUSBTransferComplete)>(libASICamera2_TEXT__callbackUSBTransferComplete);
+inline void (*callbackUSBTransferComplete)(struct libusb_transfer *) = reinterpret_cast<decltype(callbackUSBTransferComplete)>(libASICamera2_TEXT__callbackUSBTransferComplete);
 
-auto lin_XferLen        = reinterpret_cast<int  *>(libASICamera2_DATA__lin_XferLen);
+inline auto lin_XferLen        = reinterpret_cast<int  *>(libASICamera2_DATA__lin_XferLen);
 
-auto len_get            = reinterpret_cast<int  *>(libASICamera2_BSS__len_get);
-auto lin_XferCallbacked = reinterpret_cast<bool *>(libASICamera2_BSS__lin_XferCallbacked);
-auto XferErr            = reinterpret_cast<int  *>(libASICamera2_BSS__XferErr);
+inline auto len_get            = reinterpret_cast<int  *>(libASICamera2_BSS__len_get);
+inline auto lin_XferCallbacked = reinterpret_cast<bool *>(libASICamera2_BSS__lin_XferCallbacked);
+inline auto XferErr            = reinterpret_cast<int  *>(libASICamera2_BSS__XferErr);
 
 // =============================================================================
 
