@@ -176,7 +176,7 @@ void preview()
 
         // Debayer
         cv::Mat img_bgr;
-        cv::cvtColor(img_bayer_bg, img_bgr, CV_BayerBG2BGR);
+        cv::cvtColor(img_bayer_bg, img_bgr, cv::COLOR_BayerBG2BGR);
 
         // Add grey crosshairs
         cv::line(
