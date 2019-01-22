@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <err.h>
+#include <zwo_fixer.hpp>
 #include "Frame.h"
 #include "agc.h"
 #include "disk.h"
@@ -85,6 +86,9 @@ int main(int argc, char *argv[])
      * library, will inherit this priority.
      */
     set_thread_priority(pthread_self(), SCHED_RR, 10);
+
+    bool zwo_fixer_ok = ZWOFixerInit();
+    (void)zwo_fixer_ok; // currently unused
 
     ASI_CAMERA_INFO CamInfo;
     camera::init_camera(CamInfo);
