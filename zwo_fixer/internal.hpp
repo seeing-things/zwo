@@ -107,7 +107,7 @@ enum class Color : int
 static inline void Msg(Color color, const char *fmt, ...)
 {
 	char fmt_color[8192];
-	snprintf(fmt_color, sizeof(fmt_color), "\e[%dm" "[ZWOFixer " ZWO_VERSION_STRING "]" "%s" "\e[0m", static_cast<int>(color), fmt);
+	snprintf(fmt_color, sizeof(fmt_color), "\e[%dm" "[ZWOFixer " ZWO_VERSION_STRING "] " "%s" "\e[0m", static_cast<int>(color), fmt);
 	
 	va_list va;
 	va_start(va, fmt);
