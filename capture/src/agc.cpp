@@ -16,10 +16,8 @@
 extern std::atomic_bool end_program;
 
 // AGC outputs
-extern std::atomic_int gain;
-extern std::atomic_bool gain_updated;
-extern std::atomic_int exposure_us;
-extern std::atomic_bool exposure_updated;
+extern std::atomic_int camera_gain;
+extern std::atomic_int camera_exposure_us;
 
 extern std::mutex to_agc_deque_mutex;
 extern std::condition_variable to_agc_deque_cv;
@@ -105,11 +103,10 @@ void agc()
             GAIN_MAX
         );
         printf(", gain: %03d", new_gain);
-        if (new_gain != gain)
+        if (new_gain != camera_gain)
         {
-            printf(" %c", (new_gain > gain ? '+' : '-'));
-            gain = new_gain;
-            gain_updated = true;
+            printf(" %c", (new_gain > camera_gain ? '+' : '-'));
+            camera_gain = new_gain;
         }
 
         // derive new camera exposure time
@@ -119,11 +116,10 @@ void agc()
             EXPOSURE_MAX_US
         );
         printf(", exposure: %05.2f ms", (float)new_exposure_us / 1.0e3);
-        if (new_exposure_us != exposure_us)
+        if (new_exposure_us != camera_exposure_us)
         {
-            printf(" %c", (new_exposure_us > exposure_us ? '+' : '-'));
-            exposure_us = new_exposure_us;
-            exposure_updated = true;
+            printf(" %c", (new_exposure_us > camera_exposure_us ? '+' : '-'));
+            camera_exposure_us = new_exposure_us;
         }
 
         printf("\n");

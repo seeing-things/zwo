@@ -17,10 +17,8 @@ extern std::atomic_bool end_program;
 extern std::atomic_bool agc_enabled;
 
 // AGC outputs
-extern std::atomic_int gain;
-extern std::atomic_bool gain_updated;
-extern std::atomic_int exposure_us;
-extern std::atomic_bool exposure_updated;
+extern std::atomic_int camera_gain;
+extern std::atomic_int camera_exposure_us;
 
 // std::deque is not thread safe
 extern std::mutex to_disk_deque_mutex;
@@ -150,6 +148,8 @@ void run_camera(ASI_CAMERA_INFO &CamInfo)
     }
 
     int frame_count = 0;
+    int gain_prev = -1;
+    int exposure_us_prev = -1;
     int time1 = GetTickCount();
     int agc_last_dispatch_ts = GetTickCount();
     while (!end_program)
@@ -172,26 +172,31 @@ void run_camera(ASI_CAMERA_INFO &CamInfo)
         // Matching decrement in write_to_disk thread (except in case of failure to get frame data)
         frame->incrRefCount();
 
-        // Set camera gain if value was updated by AGC thread
-        if (gain_updated)
+        // Set camera gain if value was updated in another thread
+        if (camera_gain != gain_prev)
         {
-            asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, gain, ASI_FALSE);
+            asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_GAIN, camera_gain, ASI_FALSE);
             if (asi_rtn != ASI_SUCCESS)
             {
                 warnx("SetControlValue error for ASI_GAIN: %s", asi_error_str(asi_rtn));
             }
-
-            gain_updated = false;
+            gain_prev = camera_gain;
         }
 
-        // Set exposure time if value was updated by AGC thread
-        if (exposure_updated)
+        // Set exposure time if value was updated in another thread
+        if (camera_exposure_us != exposure_us_prev)
         {
-            asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_EXPOSURE, exposure_us, ASI_FALSE);
+            asi_rtn = ASISetControlValue(
+                CamInfo.CameraID,
+                ASI_EXPOSURE,
+                camera_exposure_us,
+                ASI_FALSE
+            );
             if (asi_rtn != ASI_SUCCESS)
             {
                 warnx("SetControlValue error for ASI_EXPOSURE: %s", asi_error_str(asi_rtn));
             }
+            exposure_us_prev = camera_exposure_us;
         }
 
         // Populate frame buffer with data from camera
