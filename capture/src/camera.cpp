@@ -76,7 +76,7 @@ static const char *asi_error_str(ASI_ERROR_CODE code)
 }
 
 
-void init_camera(ASI_CAMERA_INFO &CamInfo)
+void camera::init_camera(ASI_CAMERA_INFO &CamInfo)
 {
     ASI_ERROR_CODE asi_rtn;
 
@@ -136,7 +136,7 @@ void init_camera(ASI_CAMERA_INFO &CamInfo)
 }
 
 
-void run_camera(ASI_CAMERA_INFO &CamInfo)
+void camera::run_camera(ASI_CAMERA_INFO &CamInfo)
 {
     constexpr int AGC_PERIOD_MS = 100;
     ASI_ERROR_CODE asi_rtn;

@@ -26,8 +26,8 @@ extern std::condition_variable to_preview_deque_cv;
 extern std::deque<Frame *> to_preview_deque;
 
 // trackbar positions
-int gain_trackbar_pos = GAIN_MIN;
-int exposure_trackbar_pos = EXPOSURE_MIN_US;
+int gain_trackbar_pos = camera::GAIN_MIN;
+int exposure_trackbar_pos = camera::EXPOSURE_MIN_US;
 
 
 void make_histogram(cv::Mat &src)
@@ -47,7 +47,7 @@ void make_histogram(cv::Mat &src)
     calcHist(&src, 1, channels, Mat(), hist, 1, histSize, ranges, true, false);
 
     // plot histogram on logarithmic y-axis
-    double maxVal = log10(2080*3096);
+    double maxVal = log10(camera::WIDTH * camera::HEIGHT);
     int scale = 2;
     int height = 256;
     Mat histImg = Mat::zeros(height, 256*scale, CV_8UC3);
@@ -69,7 +69,7 @@ void make_histogram(cv::Mat &src)
 
 void gain_trackbar_callback(int pos, void *userdata)
 {
-    gain_trackbar_pos = std::clamp(pos, GAIN_MIN, GAIN_MAX);
+    gain_trackbar_pos = std::clamp(pos, camera::GAIN_MIN, camera::GAIN_MAX);
 
     // Gain under manual control
     if (!agc_enabled)
@@ -80,7 +80,7 @@ void gain_trackbar_callback(int pos, void *userdata)
 
 void exposure_trackbar_callback(int pos, void *userdata)
 {
-    exposure_trackbar_pos = std::clamp(pos, EXPOSURE_MIN_US, EXPOSURE_MAX_US);
+    exposure_trackbar_pos = std::clamp(pos, camera::EXPOSURE_MIN_US, camera::EXPOSURE_MAX_US);
 
     // Exposure time under manual control
     if (!agc_enabled)
@@ -124,7 +124,7 @@ void preview()
         "gain",
         "Histogram",
         &gain_trackbar_pos,
-        GAIN_MAX,
+        camera::GAIN_MAX,
         gain_trackbar_callback,
         nullptr
     );
@@ -133,7 +133,7 @@ void preview()
         "exposure time",
         "Histogram",
         &exposure_trackbar_pos,
-        EXPOSURE_MAX_US,
+        camera::EXPOSURE_MAX_US,
         exposure_trackbar_callback,
         nullptr
     );

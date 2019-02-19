@@ -28,8 +28,8 @@ std::atomic_bool end_program = false;
 std::atomic_bool agc_enabled = false;
 
 // AGC outputs
-std::atomic_int camera_gain = GAIN_MIN;
-std::atomic_int camera_exposure_us = EXPOSURE_MIN_US;
+std::atomic_int camera_gain = camera::GAIN_MIN;
+std::atomic_int camera_exposure_us = camera::EXPOSURE_MIN_US;
 
 // std::deque is not thread safe
 std::mutex to_disk_deque_mutex;
@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
     set_thread_priority(pthread_self(), SCHED_RR, 10);
 
     ASI_CAMERA_INFO CamInfo;
-    init_camera(CamInfo);
+    camera::init_camera(CamInfo);
 
     // Create pool of frame buffers
     Frame::IMAGE_SIZE_BYTES = CamInfo.MaxWidth * CamInfo.MaxHeight;
@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
     set_thread_priority(agc_thread.native_handle(), SCHED_OTHER, 0);
 
     // Get frames from camera and dispatch them to the other threads
-    run_camera(CamInfo);
+    camera::run_camera(CamInfo);
 
     printf("Main (camera) thread done, waiting for others to finish.\n");
 
