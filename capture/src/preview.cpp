@@ -174,9 +174,27 @@ void preview()
 
         cv::Mat img_bayer_bg(2080, 3096, CV_8UC1, (void *)(frame->frame_buffer_));
 
-        // Show color image in a window
+        // Debayer
         cv::Mat img_bgr;
         cv::cvtColor(img_bayer_bg, img_bgr, CV_BayerBG2BGR);
+
+        // Add grey crosshairs
+        cv::line(
+            img_bgr,
+            cv::Point(camera::WIDTH / 2, 0),
+            cv::Point(camera::WIDTH / 2, camera::HEIGHT - 1),
+            cv::Scalar(50, 50, 50),
+            1
+        );
+        cv::line(
+            img_bgr,
+            cv::Point(0, camera::HEIGHT / 2),
+            cv::Point(camera::WIDTH - 1, camera::HEIGHT / 2),
+            cv::Scalar(50, 50, 50),
+            1
+        );
+
+        // Show color image with crosshairs in a window
         cv::imshow(WINDOW_NAME, img_bgr);
 
         // Display histogram
