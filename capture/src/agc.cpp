@@ -12,6 +12,7 @@
 #include "Frame.h"
 #include "camera.h"
 
+using namespace camera;
 
 extern std::atomic_bool end_program;
 
