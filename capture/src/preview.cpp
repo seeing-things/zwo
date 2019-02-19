@@ -18,18 +18,16 @@ extern std::atomic_bool end_program;
 extern std::atomic_bool agc_enabled;
 
 // AGC outputs (possibly under manual control here)
-extern std::atomic_int gain;
-extern std::atomic_bool gain_updated;
-extern std::atomic_int exposure_us;
-extern std::atomic_bool exposure_updated;
+extern std::atomic_int camera_gain;
+extern std::atomic_int camera_exposure_us;
 
 extern std::mutex to_preview_deque_mutex;
 extern std::condition_variable to_preview_deque_cv;
 extern std::deque<Frame *> to_preview_deque;
 
 // trackbar positions
-int gain_trackbar_pos = 0;
-int exposure_trackbar_pos = 32;
+int gain_trackbar_pos = GAIN_MIN;
+int exposure_trackbar_pos = EXPOSURE_MIN_US;
 
 
 void make_histogram(cv::Mat &src)
@@ -76,8 +74,7 @@ void gain_trackbar_callback(int pos, void *userdata)
     // Gain under manual control
     if (!agc_enabled)
     {
-        gain = pos;
-        gain_updated = true;
+        camera_gain = gain_trackbar_pos;
     }
 }
 
@@ -88,8 +85,7 @@ void exposure_trackbar_callback(int pos, void *userdata)
     // Exposure time under manual control
     if (!agc_enabled)
     {
-        exposure_us = pos;
-        exposure_updated = true;
+        camera_exposure_us = exposure_trackbar_pos;
     }
 }
 
@@ -98,10 +94,8 @@ void agc_mode_trackbar_callback(int pos, void *userdata)
     // AGC is being disabled so update gain and exposure time to trackbar positions
     if (agc_enabled == true && pos == 1)
     {
-        gain = gain_trackbar_pos;
-        gain_updated = true;
-        exposure_us = exposure_trackbar_pos;
-        exposure_updated = true;
+        camera_gain = gain_trackbar_pos;
+        camera_exposure_us = exposure_trackbar_pos;
     }
     agc_enabled = (pos == 1) ? true : false;
 }
