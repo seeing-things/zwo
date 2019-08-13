@@ -5,9 +5,9 @@ CXXFLAGS:=-std=c++17 -fno-exceptions -fno-strict-aliasing -D_GLIBCXX_USE_CXX11_A
 
 
 # omit leading zeroes or else face the wrath of octal interpretation
-ZWO_VERSION_MAJOR   :=0
-ZWO_VERSION_MINOR   :=7
-ZWO_VERSION_REVISION:=503
+ZWO_VERSION_MAJOR   :=1
+ZWO_VERSION_MINOR   :=14
+ZWO_VERSION_REVISION:=715
 
 ZWO_VERSION_STRING:=$(shell printf "%u.%u.%04u"     $(ZWO_VERSION_MAJOR) $(ZWO_VERSION_MINOR) $(ZWO_VERSION_REVISION))
 ZWO_VERSION       :=$(shell printf "0x%02u%02u%04u" $(ZWO_VERSION_MAJOR) $(ZWO_VERSION_MINOR) $(ZWO_VERSION_REVISION))
