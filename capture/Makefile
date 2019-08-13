@@ -14,7 +14,7 @@ USB = -I../libusb/include  -L../libusb/$(PLATFORM) -lusb-1.0
 OPENCV += -I/usr/include/opencv4
 
 
-ASI_VERSION = 0.7.0503
+ASI_VERSION = 1.14.0715
 
 ASI_BASEPATH = ../$(ASI_VERSION)/linux_sdk
 

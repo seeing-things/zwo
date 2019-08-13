@@ -306,7 +306,7 @@ private:
 static inline const uintptr_t libASICamera2_base = FindLibBaseAddr("libASICamera2.so." ZWO_VERSION_STRING);
 
 
-#if ZWO_VERSION == 0x00070503U
+#if ZWO_VERSION == 0x00070503U // 0.7.0503
 
 #define libASICamera2_INIT                              (libASICamera2_base + 0x039290)
 #define libASICamera2_PLT                               (libASICamera2_base + 0x0392A8)
@@ -332,6 +332,33 @@ static inline const uintptr_t libASICamera2_base = FindLibBaseAddr("libASICamera
 #define libASICamera2_BSS__len_get                      (libASICamera2_base + 0x37B8D0)
 #define libASICamera2_BSS__lin_XferCallbacked           (libASICamera2_base + 0x37B8D4)
 #define libASICamera2_BSS__XferErr                      (libASICamera2_base + 0x37B8E0)
+
+#elif ZWO_VERSION == 0x01140715U // 1.14.0715
+
+#define libASICamera2_INIT                              (libASICamera2_base + 0x043930)
+#define libASICamera2_PLT                               (libASICamera2_base + 0x043948)
+#define libASICamera2_TEXT                              (libASICamera2_base + 0x048610)
+#define libASICamera2_FINI                              (libASICamera2_base + 0x14BD18)
+#define libASICamera2_RODATA                            (libASICamera2_base + 0x14BD40)
+#define libASICamera2_DATARELRO                         (libASICamera2_base + 0x37F820)
+#define libASICamera2_GOT                               (libASICamera2_base + 0x384DF8)
+#define libASICamera2_GOTPLT                            (libASICamera2_base + 0x385190)
+#define libASICamera2_DATA                              (libASICamera2_base + 0x387800)
+#define libASICamera2_BSS                               (libASICamera2_base + 0x38D360)
+#define libASICamera2_EXTERN                            (libASICamera2_base + 0x3E49A0)
+
+#define libASICamera2_PLT__libusb_open                  (libASICamera2_base + 0x044098)
+#define libASICamera2_PLT__libusb_submit_transfer       (libASICamera2_base + 0x045608)
+#define libASICamera2_PLT__libusb_cancel_transfer       (libASICamera2_base + 0x043D28)
+#define libASICamera2_PLT__CCameraFX3_startAsyncXfer    (libASICamera2_base + 0x044BE8)
+
+#define libASICamera2_TEXT__callbackUSBTransferComplete (libASICamera2_base + 0x1402E0)
+
+#define libASICamera2_DATA__lin_XferLen                 (libASICamera2_base + 0x38D260)
+
+#define libASICamera2_BSS__len_get                      (libASICamera2_base + 0x3DD850)
+#define libASICamera2_BSS__lin_XferCallbacked           (libASICamera2_base + 0x3DD854)
+#define libASICamera2_BSS__XferErr                      (libASICamera2_base + 0x3DD860)
 
 #else
 
