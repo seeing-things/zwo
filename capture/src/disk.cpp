@@ -4,10 +4,14 @@
 #include <mutex>
 #include <condition_variable>
 #include <unistd.h>
+#include <err.h>
 #include <sys/syscall.h>
+#include <sys/statvfs.h>
 #include "Frame.h"
 #include "SERFile.h"
 
+
+constexpr int64_t MIN_FREE_DISK_SPACE_BYTES = 100 << 20; // 100 MiB
 
 extern std::atomic_bool end_program;
 
@@ -25,6 +29,8 @@ void write_to_disk(
     printf("disk thread id: %ld\n", syscall(SYS_gettid));
 
     std::unique_ptr<SERFile> ser_file;
+    struct statvfs disk_stats;
+    int32_t frame_count = 0;
 
     bool disk_write_enabled = filename != nullptr;
     if (disk_write_enabled)
@@ -35,7 +41,7 @@ void write_to_disk(
     }
     else
     {
-        printf("Warning: No filename provided; not writing to disk!\n");
+        warnx("No filename provided; not writing to disk!\n");
     }
 
     while (!end_program)
@@ -53,10 +59,29 @@ void write_to_disk(
 
         if (disk_write_enabled)
         {
+            // Check free disk space (but not every single frame)
+            if (frame_count % 100 == 0)
+            {
+                if (statvfs(filename, &disk_stats) != 0)
+                {
+                    warn("Tried to check disk space with statvfs but the call failed");
+                }
+                else
+                {
+                    int64_t free_bytes = disk_stats.f_bsize * disk_stats.f_bavail;
+                    if (free_bytes <= MIN_FREE_DISK_SPACE_BYTES)
+                    {
+                        warnx("Disk is nearly full! Disabled writes: frames going to bit bucket!");
+                        disk_write_enabled = false;
+                    }
+                }
+            }
+
             ser_file->addFrame(*frame);
         }
 
         frame->decrRefCount();
+        frame_count++;
     }
 
     printf("Disk thread ending.\n");
