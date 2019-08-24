@@ -2,10 +2,11 @@
 
 import asi
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2
 
 def main():
+
+    print('Warning: No checking for error return codes!')
 
     info = asi.ASI_CAMERA_INFO()
     asi.ASIGetNumOfConnectedCameras()
