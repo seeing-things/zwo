@@ -55,10 +55,8 @@ setup(
         Extension(
             '_asi',
             ['asi.i'],
-            swig_opts=['-modern', '-I../1.14.0715/linux_sdk/include/'],
-            include_dirs=['../1.14.0715/linux_sdk/include/'],
-            library_dirs=['../1.14.0715/linux_sdk/lib/x64/'],
-            extra_objects=['../1.14.0715/linux_sdk/lib/x64/libASICamera2.so.1.14.0715'],
+            swig_opts=['-modern', '-I/usr/local/include'],
+            extra_objects=['/usr/local/lib/libASICamera2.so'],
         )
     ],
 
