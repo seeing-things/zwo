@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages, Extension
+from setuptools.command.build_py import build_py as _build_py
 # To use a consistent encoding
 from codecs import open
 from os import path
@@ -9,6 +10,16 @@ here = path.abspath(path.dirname(__file__))
 # with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 #     long_description = f.read()
 
+
+# Have to define a new class that is used for the build_py step because build_py expects to find
+# asi.py, but that isn't generated until build_ext is run. Normally build_ext is run after 
+# build_py. When this class is used for build_py, build_ext is run first. See also the cmdclass
+# option added to the setup() function further down in this file.
+class build_py(_build_py):
+    def run(self):
+        self.run_command("build_ext")
+        return super().run()
+
 setup(
     name='asi',
 
@@ -17,7 +28,7 @@ setup(
     # https://packaging.python.org/en/latest/single_source_version.html
     version='0.1.0',
 
-    description='Python wrapper for the Linux ZWO ASI Camera SDK',
+    description='Python wrapper for the ZWO ASI Camera Linux SDK',
     # long_description=long_description,
 
     # url='https://github.com/bgottula/point',
@@ -52,4 +63,6 @@ setup(
     ],
 
     py_modules=['asi'],
+
+    cmdclass={'build_py': build_py}
 )
