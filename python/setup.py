@@ -31,7 +31,7 @@ setup(
     description='Python wrapper for the ZWO ASI Camera Linux SDK',
     # long_description=long_description,
 
-    # url='https://github.com/bgottula/point',
+    url='https://github.com/seeing-things/zwo/',
 
     author='Brett Gottula',
     author_email='bgottula@gmail.com',
@@ -49,18 +49,16 @@ setup(
 
     keywords='astronomy telescopes zwo asi',
 
-    # packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-
     ext_modules=[
         Extension(
             '_asi',
             ['asi.i'],
             swig_opts=['-modern', '-I/usr/local/include'],
-            extra_objects=['/usr/local/lib/libASICamera2.so'],
+            libraries=['ASICamera2'],
         )
     ],
 
     py_modules=['asi'],
 
-    cmdclass={'build_py': build_py}
+    cmdclass={'build_py': build_py},
 )
