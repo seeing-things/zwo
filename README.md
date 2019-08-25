@@ -1,6 +1,26 @@
-## Build Dependencies
+This repository contains the ZWO ASI camera SDK along with some software that depends on this SDK.
 
-To compile the capture software, a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the build-essential package for this.
+# Installing the SDK
+
+The [SDK](https://astronomy-imaging-camera.com/software-drivers) is provided by ZWO in the form of a header file and shared object files for Linux and Windows. The Linux version of the library can be installed on Debian-based systems (including Ubuntu) via a PPA as the `libasicamera2` package by following the steps in this section.
+
+First add the PPA for the asi-common dependency, which provides appropriate udev rules for ASI cameras:
+
+    $ sudo add-apt-repository ppa:mutlaqja/ppa
+
+Next, add the URL for the SDK PPA to a sources.list file:
+
+    $ sudo bash -c 'echo "deb [trusted=yes] https://apt.fury.io/jgottula/ /" > /etc/apt/sources.list.d/jgottula.list'
+
+Now it should be possible to update the package cache and install:
+
+    $ apt update
+    $ sudo apt install libasicamera2
+
+
+# ZWO Fixer
+
+`zwo_fixer` is a shim library which patches a bug in the ASI library. It is an optional dependency for the Python package and the Capture software included in this repository. To compile a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the build-essential package for this.
 
 The following libraries are required for building the `zwo_fixer` shim library (Debian package names in parentheses):
 - librt (libc6-dev)
@@ -10,6 +30,32 @@ The following libraries are required for building the `zwo_fixer` shim library (
 - libelf (libelf-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
 
+
+# Python Bindings
+
+Python bindings for the ASI library are available in the python/ subdirectory as the `asi` Python package. This interface is generated using SWIG. This package has only been tested with Python 3. There's probably no reason it can't work with Python 2 but the developers are lazy and can't be bothered to test against multiple Python versions.
+
+Installation:
+1. Install the ZWO ASI SDK as described previously
+2. Install some dependencies: `sudo apt install python3-numpy swig`.
+3. Change to the python/ subdirectory in this repository
+4. Run `python3 setup.py install` or `pip3 install .`
+
+The API provided by this package matches the C API very closely with a few minor exceptions to be more Pythonic. For example, NumPy arrays were selected as the type for the data buffer returned by the API functions that retrieve data from the camera. This was found to be far more natural than attempting to awkwardly mimick the pattern of passing a pointer to a pre-allocated buffer to the function as would be done in C.
+
+
+# Capture
+
+`capture` is high-performance capture software compatible with the ASI library. Features include:
+
+- Efficient memory and CPU resource management
+- Real-time priorization of critical threads
+- Writes raw camera data directly to disk in SER format
+- Custom automatic gain and exposure control
+- Live preview, implemented in a manner that minimizes likelihood of frame loss due to resource contention
+
+To compile this software, a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the build-essential package for this.
+
 The following libraries are required for building the `capture` program (Debian package names in parentheses):
 - librt (libc6-dev)
 - libpthread (libc6-dev)
@@ -17,6 +63,7 @@ The following libraries are required for building the `capture` program (Debian 
 - libopencv-core (libopencv-core-dev)
 - libopencv-highui (libopencv-highui-dev)
 - libopencv-imgproc (libopencv-imgproc-dev)
+- libzwo_fixer -- built from the source contained in this repository
 
 ## Enabling Realtime Priorities for Non-Root Users
 
