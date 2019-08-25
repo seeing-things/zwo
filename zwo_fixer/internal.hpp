@@ -26,10 +26,13 @@
 #include <cassert>
 
 // C++
+#include <string>
 #include <type_traits>
 
 // STL
 #include <forward_list>
+#include <map>
+#include <unordered_map>
 
 // Linux
 #include <unistd.h>
@@ -60,26 +63,11 @@ inline uintptr_t PageSize()
 // =============================================================================
 
 
-// libdl etc ===================================================================
-
-template<typename T> static T dlsym_safe(void *handle, const char *symbol) { return (T)dlsym(handle, symbol); }
-#define dlsym dlsym_safe
-
-// =============================================================================
-
-
 // libusb ======================================================================
 
 #ifdef __cplusplus
 #define libusb_strerror(errcode) libusb_strerror(static_cast<enum libusb_error>(errcode))
 #endif
-
-// =============================================================================
-
-
-// Globals =====================================================================
-
-static inline bool g_Fail = false;
 
 // =============================================================================
 
@@ -107,7 +95,7 @@ enum class Color : int
 static inline void Msg(Color color, const char *fmt, ...)
 {
 	char fmt_color[8192];
-	snprintf(fmt_color, sizeof(fmt_color), "\e[%dm" "[ZWOFixer " ZWO_VERSION_STRING "] " "%s" "\e[0m", static_cast<int>(color), fmt);
+	snprintf(fmt_color, sizeof(fmt_color), "\e[%dm" "[ZWOFixer] " "%s" "\e[0m", static_cast<int>(color), fmt);
 	
 	va_list va;
 	va_start(va, fmt);
@@ -118,44 +106,127 @@ static inline void Msg(Color color, const char *fmt, ...)
 // =============================================================================
 
 
-// Helper: find base address of dynamic library ================================
+// libASICamera2 versions, offsets, etc ========================================
 
-static inline uintptr_t FindLibBaseAddr(const char *lib_name)
+using OffsetMap_t  = std::unordered_map<std::string, uintptr_t>;
+using VersionMap_t = std::map<std::string, const OffsetMap_t *>;
+
+static const OffsetMap_t g_Offsets_v1_14_0715 = {
+	{ ".plt:libusb_cancel_transfer",       0x043D28 },
+	{ ".text:callbackUSBTransferComplete", 0x1402E0 },
+	{ ".data:lin_XferLen",                 0x38D260 },
+	{ ".bss:lin_XferCallbacked",           0x3DD854 },
+};
+
+static const OffsetMap_t g_Offsets_v0_07_0503 = {
+	{ ".plt:libusb_cancel_transfer",       0x039588 },
+	{ ".text:callbackUSBTransferComplete", 0x0FB750 },
+	{ ".data:lin_XferLen",                 0x33F3E0 },
+	{ ".bss:lin_XferCallbacked",           0x37B8D4 },
+};
+
+static const VersionMap_t g_KnownLibASIVersions = {
+	{ "1, 14, 0715", &g_Offsets_v1_14_0715 },
+	{ "1, 14, 0425", nullptr               },
+	{ "1, 14, 0227", nullptr               },
+	{ "1, 13, 0930", nullptr               },
+	{ "1, 13, 0821", nullptr               },
+	{ "0,  7, 0503", &g_Offsets_v0_07_0503 },
+	{ "0,  7, 0118", nullptr               },
+	{ "0,  6, 0921", nullptr               },
+	{ "0,  6, 0504", nullptr               },
+	{ "0,  6, 0414", nullptr               },
+	{ "0,  6, 0328", nullptr               },
+};
+
+static const dl_phdr_info *g_LibASIInfo    = nullptr;
+static       void         *g_LibASIHandle  = nullptr;
+static const char         *g_LibASIVersion = nullptr;
+static const OffsetMap_t  *g_LibASIOffsets = nullptr;
+
+static inline bool IsLibASILoadedAndSupported()
 {
-	struct LambdaInfo
-	{
-		const char *lib_name;
-		uintptr_t lib_base;
-	} l_data = { lib_name, 0x0 };
+	static bool s_Loaded    = false;
+	static bool s_Supported = false;
 	
-	bool success = (dl_iterate_phdr([](struct dl_phdr_info *info, size_t size, void *data) -> int {
-		auto p_data = reinterpret_cast<decltype(l_data) *>(data);
+	static bool s_First = true;
+	if (s_First) {
+		dl_iterate_phdr(
+			[](dl_phdr_info *info, size_t size, void *data) -> int{
+				(void)data;
+				
+				if (info == nullptr)                                        return 0;
+				if (info->dlpi_name == nullptr)                             return 0;
+				if (strstr(info->dlpi_name, "libASICamera2.so") == nullptr) return 0;
+				
+				g_LibASIInfo = info;
+				return 1;
+			},
+			nullptr);
 		
-//		Msg(Color::WHITE, "p_data->lib_name: \"%s\"\n", p_data->lib_name);
-//		Msg(Color::WHITE, "p_data->lib_base: 0x%016" PRIXPTR "\n", p_data->lib_base);
-		
-//		Msg(Color::WHITE, "info->dlpi_name: \"%s\"\n", info->dlpi_name);
-//		Msg(Color::WHITE, "info->dlpi_addr: 0x%016" PRIXPTR "\n", (uintptr_t)info->dlpi_addr);
-		
-		if (info != nullptr && info->dlpi_name != nullptr && strstr(info->dlpi_name, p_data->lib_name) != nullptr) {
-//			Msg(Color::WHITE, "return 1\n");
-			p_data->lib_base = info->dlpi_addr;
-			return 1;
+		if (g_LibASIInfo != nullptr) {
+		//	Msg(Color::WHITE, "g_LibASIInfo->lib_name: \"%s\"\n",                       g_LibASIInfo->dlpi_name);
+		//	Msg(Color::WHITE, "g_LibASIInfo->lib_base: 0x%016" PRIXPTR "\n", (uintptr_t)g_LibASIInfo->dlpi_addr);
+			
+			if ((g_LibASIHandle = dlopen(g_LibASIInfo->dlpi_name, RTLD_LAZY | RTLD_NOLOAD)) != nullptr) {
+				s_Loaded = true;
+				
+				char *(*ASIGetSDKVersion)() = nullptr;
+				*reinterpret_cast<void **>(&ASIGetSDKVersion) = dlsym(g_LibASIHandle, "ASIGetSDKVersion");
+				if (ASIGetSDKVersion != nullptr) {
+					g_LibASIVersion = (*ASIGetSDKVersion)();
+					if (g_LibASIVersion != nullptr) {
+					//	Msg(Color::WHITE, "g_LibASIVersion: \"%s\"\n", g_LibASIVersion);
+						
+						auto it = g_KnownLibASIVersions.find(g_LibASIVersion);
+						if (it != g_KnownLibASIVersions.end()) {
+							g_LibASIOffsets = it->second;
+							if (g_LibASIOffsets == nullptr) {
+								Msg(Color::RED, "Init failure: library loaded, but version \"%s\" not supported\n", g_LibASIVersion);
+							}
+						} else {
+							Msg(Color::RED, "Init failure: library loaded, but version \"%s\" not recognized\n", g_LibASIVersion);
+						}
+					} else {
+						Msg(Color::RED, "Init failure: library loaded, but ASIGetSDKVersion returned nullptr\n");
+					}
+				} else {
+					Msg(Color::RED, "Init failure: library loaded, but ASIGetSDKVersion not found (dlsym)\n");
+				}
+			} else {
+				Msg(Color::RED, "Init failure: failed to load library\n");
+			}
+		} else {
+			Msg(Color::RED, "Init failure: failed to locate library in memory\n");
 		}
 		
-//		Msg(Color::WHITE, "return 0\n");
-		return 0;
-	}, &l_data) != 0);
-	
-	if (success) {
-		Msg(Color::GREEN, "Found library %s base address: 0x%016" PRIXPTR "\n", lib_name, l_data.lib_base);
-	} else {
-		Msg(Color::RED, "Cannot locate the in-memory base address for library %s.\n", lib_name);
-		g_Fail = true;
+		s_First = false;
 	}
 	
-	return l_data.lib_base;
+	return (s_Loaded && s_Supported);
 }
+
+static inline uintptr_t GetAddr(const std::string& name)
+{
+	if (!IsLibASILoadedAndSupported()) return 0;
+	
+	// will attempt to throw if not present in the map
+	return static_cast<uintptr_t>(g_LibASIInfo->dlpi_addr) + g_LibASIOffsets->at(name);
+}
+
+template<typename T> static T  GetPtr(const std::string& name) { return reinterpret_cast<T>(GetAddr(name)); }
+template<typename T> static T& GetRef(const std::string& name) { return *GetPtr<T *>(name); }
+
+// =============================================================================
+
+
+// libASICamera2 pointers ======================================================
+
+inline void (*callbackUSBTransferComplete)(libusb_transfer *) =
+	GetPtr<decltype(callbackUSBTransferComplete)>(".text:callbackUSBTransferComplete");
+
+inline auto lin_XferLen        = GetRef<int >(".data:lin_XferLen");
+inline auto lin_XferCallbacked = GetRef<bool>(".bss:lin_XferCallbacked");
 
 // =============================================================================
 
@@ -207,6 +278,8 @@ public:
 	PLTHook(const char *name, uintptr_t plt_entry_addr, F_RET (*hook_func)(F_PARAMS...), PLTHookMode mode = PLTHOOK_DEFAULT) :
 		m_Name(name), m_PLTEntryPtr((uint8_t *)plt_entry_addr), m_HookFuncAddr((uint64_t)hook_func), m_Mode(mode)
 	{
+		if (!IsLibASILoadedAndSupported()) return;
+		
 		Msg(Color::WHITE, "PLTHook(%s): constructed\n", m_Name);
 		if ((mode & PLTHOOK_MANUAL) == 0) {
 			Install();
@@ -217,6 +290,8 @@ public:
 	
 	~PLTHook()
 	{
+		if (!IsLibASILoadedAndSupported()) return;
+		
 		if ((m_Mode & PLTHOOK_PERSIST) == 0) {
 			Uninstall();
 		}
@@ -225,6 +300,8 @@ public:
 	
 	void Install()
 	{
+		if (!IsLibASILoadedAndSupported()) return;
+		
 		if (m_Installed) return;
 		m_Installed = true;
 		
@@ -262,6 +339,8 @@ public:
 	
 	void Uninstall()
 	{
+		if (!IsLibASILoadedAndSupported()) return;
+		
 		if (!m_Installed) return;
 		m_Installed = false;
 		
@@ -292,118 +371,5 @@ private:
 	uint8_t m_Backup[16];
 	bool m_Installed = false;
 };
-
-// =============================================================================
-
-
-// libASICamera2 addresses =====================================================
-
-#if !defined(ZWO_VERSION_MAJOR) || !defined(ZWO_VERSION_MINOR) || !defined(ZWO_VERSION_REVISION) || !defined(ZWO_VERSION) || !defined(ZWO_VERSION_STRING)
-#error
-#endif
-
-
-static inline const uintptr_t libASICamera2_base = FindLibBaseAddr("libASICamera2.so." ZWO_VERSION_STRING);
-
-
-#if ZWO_VERSION == 0x00070503U // 0.7.0503
-
-#define libASICamera2_INIT                              (libASICamera2_base + 0x039290)
-#define libASICamera2_PLT                               (libASICamera2_base + 0x0392A8)
-#define libASICamera2_TEXT                              (libASICamera2_base + 0x03D250)
-#define libASICamera2_FINI                              (libASICamera2_base + 0x1069C8)
-#define libASICamera2_RODATA                            (libASICamera2_base + 0x1069E0)
-#define libASICamera2_DATARELRO                         (libASICamera2_base + 0x333040)
-#define libASICamera2_GOT                               (libASICamera2_base + 0x337918)
-#define libASICamera2_GOTPLT                            (libASICamera2_base + 0x337C48)
-#define libASICamera2_DATA                              (libASICamera2_base + 0x339C40)
-#define libASICamera2_BSS                               (libASICamera2_base + 0x33F4E0)
-#define libASICamera2_EXTERN                            (libASICamera2_base + 0x3817F0)
-
-#define libASICamera2_PLT__libusb_open                  (libASICamera2_base + 0x039868)
-#define libASICamera2_PLT__libusb_submit_transfer       (libASICamera2_base + 0x03A988)
-#define libASICamera2_PLT__libusb_cancel_transfer       (libASICamera2_base + 0x039588)
-#define libASICamera2_PLT__CCameraFX3_startAsyncXfer    (libASICamera2_base + 0x03A188)
-
-#define libASICamera2_TEXT__callbackUSBTransferComplete (libASICamera2_base + 0x0FB750)
-
-#define libASICamera2_DATA__lin_XferLen                 (libASICamera2_base + 0x33F3E0)
-
-#define libASICamera2_BSS__len_get                      (libASICamera2_base + 0x37B8D0)
-#define libASICamera2_BSS__lin_XferCallbacked           (libASICamera2_base + 0x37B8D4)
-#define libASICamera2_BSS__XferErr                      (libASICamera2_base + 0x37B8E0)
-
-#elif ZWO_VERSION == 0x01140715U // 1.14.0715
-
-#define libASICamera2_INIT                              (libASICamera2_base + 0x043930)
-#define libASICamera2_PLT                               (libASICamera2_base + 0x043948)
-#define libASICamera2_TEXT                              (libASICamera2_base + 0x048610)
-#define libASICamera2_FINI                              (libASICamera2_base + 0x14BD18)
-#define libASICamera2_RODATA                            (libASICamera2_base + 0x14BD40)
-#define libASICamera2_DATARELRO                         (libASICamera2_base + 0x37F820)
-#define libASICamera2_GOT                               (libASICamera2_base + 0x384DF8)
-#define libASICamera2_GOTPLT                            (libASICamera2_base + 0x385190)
-#define libASICamera2_DATA                              (libASICamera2_base + 0x387800)
-#define libASICamera2_BSS                               (libASICamera2_base + 0x38D360)
-#define libASICamera2_EXTERN                            (libASICamera2_base + 0x3E49A0)
-
-#define libASICamera2_PLT__libusb_open                  (libASICamera2_base + 0x044098)
-#define libASICamera2_PLT__libusb_submit_transfer       (libASICamera2_base + 0x045608)
-#define libASICamera2_PLT__libusb_cancel_transfer       (libASICamera2_base + 0x043D28)
-#define libASICamera2_PLT__CCameraFX3_startAsyncXfer    (libASICamera2_base + 0x044BE8)
-
-#define libASICamera2_TEXT__callbackUSBTransferComplete (libASICamera2_base + 0x1402E0)
-
-#define libASICamera2_DATA__lin_XferLen                 (libASICamera2_base + 0x38D260)
-
-#define libASICamera2_BSS__len_get                      (libASICamera2_base + 0x3DD850)
-#define libASICamera2_BSS__lin_XferCallbacked           (libASICamera2_base + 0x3DD854)
-#define libASICamera2_BSS__XferErr                      (libASICamera2_base + 0x3DD860)
-
-#else
-
-#error zwo_fixer does not support this version of libASICamera2
-
-#endif
-
-
-inline void (*callbackUSBTransferComplete)(struct libusb_transfer *) = reinterpret_cast<decltype(callbackUSBTransferComplete)>(libASICamera2_TEXT__callbackUSBTransferComplete);
-
-inline auto lin_XferLen        = reinterpret_cast<int  *>(libASICamera2_DATA__lin_XferLen);
-
-inline auto len_get            = reinterpret_cast<int  *>(libASICamera2_BSS__len_get);
-inline auto lin_XferCallbacked = reinterpret_cast<bool *>(libASICamera2_BSS__lin_XferCallbacked);
-inline auto XferErr            = reinterpret_cast<int  *>(libASICamera2_BSS__XferErr);
-
-// =============================================================================
-
-
-// libASICamera2 dummy types ===================================================
-
-class CCameraFX3
-{
-public:
-	 CCameraFX3()            = delete;
-	 CCameraFX3(CCameraFX3&) = delete;
-	~CCameraFX3()            = delete;
-	
-	uint8_t __pad0000[0x0008];
-	libusb_device_handle *dev_handle;
-	uint8_t __pad0010[0x0048];
-};
-static_assert(sizeof(CCameraFX3) == 0x0058);
-
-class CCameraBase : public CCameraFX3
-{
-public:
-	         CCameraBase()             = delete;
-	         CCameraBase(CCameraBase&) = delete;
-	virtual ~CCameraBase()             = delete;
-	
-	uint8_t __pad0060[0x06C0];
-};
-static_assert(sizeof(CCameraBase) == 0x0720);
-
-using CCameraS178MC = CCameraBase;
 
 // =============================================================================
