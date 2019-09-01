@@ -4,11 +4,7 @@ This repository contains the ZWO ASI camera SDK along with some software that de
 
 The [SDK](https://astronomy-imaging-camera.com/software-drivers) is provided by ZWO in the form of a header file and shared object files for Linux and Windows. The Linux version of the library can be installed on Debian-based systems (including Ubuntu) via a PPA as the `libasicamera2` package by following the steps in this section.
 
-First add the PPA for the asi-common dependency, which provides appropriate udev rules for ASI cameras:
-
-    $ sudo add-apt-repository ppa:mutlaqja/ppa
-
-Next, add the URL for the SDK PPA to a sources.list file:
+First, add the URL for the SDK PPA to a sources.list file:
 
     $ sudo bash -c 'echo "deb [trusted=yes] https://apt.fury.io/jgottula/ /" > /etc/apt/sources.list.d/jgottula.list'
 
@@ -61,9 +57,11 @@ The following libraries are required for building the `capture` program (Debian 
 - libpthread (libc6-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
 - libopencv-core (libopencv-core-dev)
-- libopencv-highui (libopencv-highui-dev)
+- libopencv-highgui (libopencv-highgui-dev)
 - libopencv-imgproc (libopencv-imgproc-dev)
 - libzwo_fixer -- built from the source contained in this repository
+
+Once the dependencies are installed, simply run `make` in the `capture/` subdirectory. This should generate a binary `capture/bin/capture`.
 
 ## Enabling Realtime Priorities for Non-Root Users
 
