@@ -22,7 +22,7 @@ ASI_INCPATH  = $(ASI_BASEPATH)/include
 ASI_LIBPATH  = $(ASI_BASEPATH)/lib/$(PLATFORM)
 
 ASI_CFLAGS  = -I$(ASI_INCPATH)
-ASI_LDFLAGS = -Wl,-rpath,$(ASI_LIBPATH) -Wl,-rpath,$(shell realpath $(ASI_LIBPATH)) -L$(ASI_LIBPATH) -l:libASICamera2.so.$(ASI_VERSION)
+ASI_LDFLAGS = -L$(ASI_LIBPATH) -l:libASICamera2.so.$(ASI_VERSION)
 
 
 ZWOFIXER_PATH=../zwo_fixer
