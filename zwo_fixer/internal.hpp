@@ -23,7 +23,6 @@
 #include <cstdint>
 #include <cstdarg>
 #include <cinttypes>
-#include <cassert>
 
 // C++
 #include <string>
@@ -40,6 +39,7 @@
 #include <sys/mman.h>
 
 // BSD
+//#include <bsd/err.h>
 //#include <bsd/string.h>
 
 // libdl etc
@@ -165,8 +165,14 @@ static inline bool IsLibASILoadedAndSupported()
 			nullptr);
 		
 		if (g_LibASIInfo != nullptr) {
-		//	Msg(Color::WHITE, "g_LibASIInfo->lib_name: \"%s\"\n",                       g_LibASIInfo->dlpi_name);
-		//	Msg(Color::WHITE, "g_LibASIInfo->lib_base: 0x%016" PRIXPTR "\n", (uintptr_t)g_LibASIInfo->dlpi_addr);
+			// calling dlsym appears to invalidate the dl_phdr_info ptr we got,
+			// so make sure we copy the info locally before that happens
+			static dl_phdr_info s_LibASIInfo;
+			memcpy(&s_LibASIInfo, g_LibASIInfo, sizeof(s_LibASIInfo));
+			g_LibASIInfo = &s_LibASIInfo;
+			
+		//	Msg(Color::WHITE, "g_LibASIInfo->dlpi_name: \"%s\"\n",                       g_LibASIInfo->dlpi_name);
+		//	Msg(Color::WHITE, "g_LibASIInfo->dlpi_addr: 0x%016" PRIXPTR "\n", (uintptr_t)g_LibASIInfo->dlpi_addr);
 			
 			if ((g_LibASIHandle = dlopen(g_LibASIInfo->dlpi_name, RTLD_LAZY | RTLD_NOLOAD)) != nullptr) {
 				s_Loaded = true;
@@ -181,7 +187,9 @@ static inline bool IsLibASILoadedAndSupported()
 						auto it = g_KnownLibASIVersions.find(g_LibASIVersion);
 						if (it != g_KnownLibASIVersions.end()) {
 							g_LibASIOffsets = it->second;
-							if (g_LibASIOffsets == nullptr) {
+							if (g_LibASIOffsets != nullptr) {
+								s_Supported = true;
+							} else {
 								Msg(Color::RED, "Init failure: library loaded, but version \"%s\" not supported\n", g_LibASIVersion);
 							}
 						} else {
@@ -225,8 +233,8 @@ template<typename T> static T& GetRef(const std::string& name) { return *GetPtr<
 inline void (*callbackUSBTransferComplete)(libusb_transfer *) =
 	GetPtr<decltype(callbackUSBTransferComplete)>(".text:callbackUSBTransferComplete");
 
-inline auto lin_XferLen        = GetRef<int >(".data:lin_XferLen");
-inline auto lin_XferCallbacked = GetRef<bool>(".bss:lin_XferCallbacked");
+inline auto& lin_XferLen        = GetRef<int >(".data:lin_XferLen");
+inline auto& lin_XferCallbacked = GetRef<bool>(".bss:lin_XferCallbacked");
 
 // =============================================================================
 
@@ -309,28 +317,19 @@ public:
 		
 		Backup();
 		
-		uint8_t *ptr = m_PLTEntryPtr;
+		// custom absolute jump thunk: uses 14 out of 16 available bytes in a .PLT section entry
+		struct AbsJmpThunk
+		{
+			explicit AbsJmpThunk(uint64_t target) : Target(target) {}
+			
+			uint8_t  Jmp [6] { 0xFF, 0x25, 0x02, 0x00, 0x00, 0x00 }; // jmp [rip+0x2]
+			uint8_t  Int3[2] { 0xCC, 0xCC };                         // int3; int3
+			uint64_t Target;                                         // dq Target  <-- QWORD-aligned!
+		};
+		static_assert(sizeof(AbsJmpThunk) == 0x10);
 		
-		// jmp qword [rip+0x00000000]
-		ptr[0x0] = 0xFF;
-		ptr[0x1] = 0x25;
-		ptr[0x2] = 0x00;
-		ptr[0x3] = 0x00;
-		ptr[0x4] = 0x00;
-		ptr[0x5] = 0x00;
-		
-		// dq Hook
-		*reinterpret_cast<uint64_t *>(ptr + 0x6) = m_HookFuncAddr;
-		
-		// int3; int3
-		ptr[0xe] = 0xCC;
-		ptr[0xf] = 0xCC;
-		
-		// custom absolute jump thunk: (uses 14 out of 16 available bytes in a .PLT section entry)
-		// 00:  FF 25 00 00 00 00        jmp [rip+0x00000000]
-		// 06:  XX XX XX XX XX XX XX XX  dq ADDR
-		// 0E:  CC                       int3
-		// 0F:  CC                       int3
+		AbsJmpThunk thunk(m_HookFuncAddr);
+		memcpy(m_PLTEntryPtr, &thunk, sizeof(thunk));
 		
 		SetWritable(false);
 		
@@ -357,7 +356,10 @@ private:
 		auto ptr = (void *)((uintptr_t)m_PLTEntryPtr & ~(PageSize() - 1));
 		int prot = (writable ? (PROT_READ | PROT_WRITE) : (PROT_READ | PROT_EXEC));
 		
-		assert(mprotect(ptr, 0x10, prot) == 0);
+		if (mprotect(ptr, 0x10, prot) != 0) {
+			Msg(Color::RED, "PLTHook(%s): mprotect(%p, 0x10, 0x%X) failed: %s\n", m_Name, ptr, prot, strerror(errno));
+			exit(1); // <-- TODO: see if there's anything we can do to avoid this
+		}
 	}
 	
 	void Backup()        { memcpy(m_Backup, m_PLTEntryPtr, 0x10); }
