@@ -1,15 +1,5 @@
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, Extension
 from setuptools.command.build_py import build_py as _build_py
-# To use a consistent encoding
-from codecs import open
-from os import path
-
-here = path.abspath(path.dirname(__file__))
-
-# Get the long description from the README file
-with open(path.join(here, 'README.md'), encoding='utf-8') as f:
-    long_description = f.read()
-
 
 # Have to define a new class that is used for the build_py step because build_py expects to find
 # asi.py, but that isn't generated until build_ext is run. Normally build_ext is run after 
@@ -29,7 +19,6 @@ setup(
     version='0.1.0',
 
     description='Python wrapper for the ZWO ASI Camera Linux SDK',
-    long_description=long_description,
 
     url='https://github.com/seeing-things/zwo/',
 
@@ -57,7 +46,7 @@ setup(
         Extension(
             '_asi',
             ['asi.i'],
-            swig_opts=['-modern', '-I/usr/local/include'],
+            swig_opts=['-modern', '-I/usr/include'],
             libraries=['ASICamera2'],
         )
     ],
