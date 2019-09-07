@@ -21,6 +21,16 @@
 %apply (unsigned char *ARGOUT_ARRAY1, int DIM1) {(unsigned char *pBuffer, long lBuffSize)};
 
 /*
+ * For ASIGetNumOfControls which returns an int by pointer in C
+ */
+%apply int *OUTPUT { int * piNumberOfControls };
+
+/*
+ * For ASIGetControlValue which returns a long and a bool enum by pointers
+ */
+%apply int *OUTPUT { long *plValue, int *pbAuto };
+
+/*
  * For use with functions that expect an array to be passed in by pointer, such as ASIGetProductIDs
  */
 %array_class(int, intArray);
