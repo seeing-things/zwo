@@ -8,9 +8,8 @@ def main():
 
     print('Warning: No checking for error return codes!')
 
-    info = asi.ASI_CAMERA_INFO()
     asi.ASIGetNumOfConnectedCameras()
-    asi.ASIGetCameraProperty(info, 0)
+    rtn, info = asi.ASIGetCameraProperty(0)
     frame_size = info.MaxWidth * info.MaxHeight
     asi.ASIOpenCamera(info.CameraID)
     asi.ASIInitCamera(info.CameraID)

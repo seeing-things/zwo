@@ -54,4 +54,6 @@ setup(
     py_modules=['asi'],
 
     cmdclass={'build_py': build_py},
+
+    test_suite='asi_test',
 )
