@@ -114,6 +114,35 @@ def ASIGetSupportedVideoFormats(camera_info):
         else:
             supported_formats.append(format)
     return supported_formats
+
+def ASICheck(return_values):
+    """Check status return code from ASICamera2 API calls for errors.
+
+    This function can be used to eliminate the need for boilerplate if-statements after every API
+    call to check for error conditions. Typical usage is to wrap an API call like so:
+    exposure_status = asi.ASICheck(asi.ASIGetExpStatus(camera_info.CameraID))
+
+    Args:
+        return_values: The return value or values from a ASICamera2 API call.
+
+    Returns:
+        The return_values but with the status code removed. If the status code was the only return
+        value from the API call, this function returns None.
+
+    Raises:
+        RuntimeError if the status code was something other than ASI_SUCCESS.
+    """
+    if isinstance(return_values, (tuple, list)):
+        status_code = return_values[0]
+        return_values = return_values[1:] if len(return_values) > 2 else return_values[1]
+    else:
+        status_code = return_values
+        return_values = None
+
+    if status_code != _asi.ASI_SUCCESS:
+        raise RuntimeError('return code: {}'.format(status_code))
+
+    return return_values
 %}
 
 /*
