@@ -33,10 +33,12 @@ setup(
         'Intended Audience :: Developers',
         'Topic :: Scientific/Engineering :: Astronomy',
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.6',
     ],
 
     keywords='astronomy telescopes zwo asi',
+
+    python_requires='python>=3.6',
 
     install_requires=[
         'numpy',
