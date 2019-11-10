@@ -215,7 +215,7 @@ class TestASI(unittest.TestCase):
         self.assertEqual(status, asi.ASI_EXP_IDLE)
 
         start_time = time.time()
-        asi.ASIStartExposure(self.info.CameraID, asi.ASI_FALSE)
+        self.assertEqual(asi.ASIStartExposure(self.info.CameraID, asi.ASI_FALSE), asi.ASI_SUCCESS)
 
         while True:
             rtn, status = asi.ASIGetExpStatus(self.info.CameraID)
