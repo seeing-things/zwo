@@ -1,14 +1,22 @@
+"""Integration tests for the asi package.
+
+The asi package is a SWIG-generated Python interface to the C API provided by ZWO.
+"""
+
 import time
 import unittest
 import random
-import asi
 import numpy as np
 import scipy.misc
-import cv2
+
+# pylint: disable=import-error
+import asi
 
 class TestASI(unittest.TestCase):
+    """Collection of integration tests for asi package."""
 
     def setUp(self):
+        """Handle standard camera initialization before test execution."""
         self.num_cameras = asi.ASIGetNumOfConnectedCameras()
         self.assertGreaterEqual(self.num_cameras, 1, 'need at least one connected camera to test')
         rtn, self.info = asi.ASIGetCameraProperty(0)
@@ -18,9 +26,12 @@ class TestASI(unittest.TestCase):
         self.assertEqual(asi.ASIInitCamera(self.info.CameraID), asi.ASI_SUCCESS)
 
     def tearDown(self):
+        """Close camera after test completes."""
         self.assertEqual(asi.ASICloseCamera(self.info.CameraID), asi.ASI_SUCCESS)
 
     def set_standard_config(self):
+        """Applies a standard configuration to the camera."""
+
         self.assertEqual(
             asi.ASISetROIFormat(
                 self.info.CameraID,
@@ -57,11 +68,13 @@ class TestASI(unittest.TestCase):
             asi.ASI_SUCCESS
         )
 
+    # pylint: disable=too-many-locals
     def test_roi(self):
+        """Test the ROI API calls."""
 
         supported_binnings = asi.ASIGetSupportedBins(self.info)
 
-        for i in range(10):
+        for _ in range(10):
 
             binning = random.choice(supported_binnings)
             width = random.randint(1, self.info.MaxWidth // binning // 8) * 8
@@ -83,7 +96,7 @@ class TestASI(unittest.TestCase):
             self.assertEqual(img_type_got, image_type)
 
 
-            for i in range(10):
+            for _ in range(10):
                 x = random.randint(0, (self.info.MaxWidth / binning - width) // 4) * 4
                 y = random.randint(0, (self.info.MaxHeight / binning - height) // 2) * 2
 
@@ -95,6 +108,7 @@ class TestASI(unittest.TestCase):
 
 
     def test_configs(self):
+        """Tests all of the camera configuration API calls."""
 
         rtn, info = asi.ASIGetCameraProperty(0)
         self.assertEqual(rtn, asi.ASI_SUCCESS)
@@ -123,7 +137,7 @@ class TestASI(unittest.TestCase):
             self.assertIsInstance(caps, asi.ASI_CONTROL_CAPS)
             self.assertGreater(len(caps.Name), 0)
 
-            rtn, value, auto = asi.ASIGetControlValue(self.info.CameraID, caps.ControlType)
+            rtn, value, _ = asi.ASIGetControlValue(self.info.CameraID, caps.ControlType)
             self.assertEqual(rtn, asi.ASI_SUCCESS)
             self.assertIsInstance(value, int)
 
@@ -138,7 +152,7 @@ class TestASI(unittest.TestCase):
                     asi.ASI_SUCCESS
                 )
 
-                rtn, value, auto = asi.ASIGetControlValue(self.info.CameraID, caps.ControlType)
+                rtn, value, _ = asi.ASIGetControlValue(self.info.CameraID, caps.ControlType)
                 self.assertEqual(rtn, asi.ASI_SUCCESS)
                 self.assertEqual(value, caps.MaxValue)
 
@@ -152,12 +166,12 @@ class TestASI(unittest.TestCase):
         )
         scipy.misc.imsave('/tmp/test_darkframe.bmp', darkframe)
         self.assertEqual(asi.ASIEnableDarkSubtract(self.info.CameraID, '/tmp/test_darkframe.bmp'),
-            asi.ASI_SUCCESS
-        )
+                         asi.ASI_SUCCESS)
         self.assertEqual(asi.ASIDisableDarkSubtract(self.info.CameraID), asi.ASI_SUCCESS)
 
 
     def test_video_capture(self):
+        """Test video capture API."""
 
         self.set_standard_config()
 
@@ -165,7 +179,7 @@ class TestASI(unittest.TestCase):
 
         frame_size = self.info.MaxWidth * self.info.MaxHeight
         num_timeouts = 0
-        for i in range(100):
+        for _ in range(100):
             (rtn, frame) = asi.ASIGetVideoData(self.info.CameraID, frame_size, 200)
             self.assertIn(rtn, [asi.ASI_SUCCESS, asi.ASI_ERROR_TIMEOUT])
             self.assertEqual(frame.size, frame_size)
@@ -180,11 +194,13 @@ class TestASI(unittest.TestCase):
         self.assertEqual(asi.ASIStopVideoCapture(self.info.CameraID), asi.ASI_SUCCESS)
 
     def test_pulse_guide(self):
+        """Test pulse guide port API"""
         for direction in range(4):
             self.assertEqual(asi.ASIPulseGuideOn(self.info.CameraID, direction), asi.ASI_SUCCESS)
             self.assertEqual(asi.ASIPulseGuideOff(self.info.CameraID, direction), asi.ASI_SUCCESS)
 
     def test_exposure(self):
+        """Test single exposure API"""
 
         exposure_time = 1.0  # in seconds
 
