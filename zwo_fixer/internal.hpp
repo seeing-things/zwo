@@ -111,6 +111,13 @@ static inline void Msg(Color color, const char *fmt, ...)
 using OffsetMap_t  = std::unordered_map<std::string, uintptr_t>;
 using VersionMap_t = std::map<std::string, const OffsetMap_t *>;
 
+static const OffsetMap_t g_Offsets_v1_14_1119 = {
+	{ ".plt:libusb_cancel_transfer",       0x046D30 },
+	{ ".text:callbackUSBTransferComplete", 0x1514D0 },
+	{ ".data:lin_XferLen",                 0x3A1540 },
+	{ ".bss:lin_XferCallbacked",           0x3F1B74 },
+};
+
 static const OffsetMap_t g_Offsets_v1_14_0715 = {
 	{ ".plt:libusb_cancel_transfer",       0x043D28 },
 	{ ".text:callbackUSBTransferComplete", 0x1402E0 },
@@ -126,6 +133,7 @@ static const OffsetMap_t g_Offsets_v0_07_0503 = {
 };
 
 static const VersionMap_t g_KnownLibASIVersions = {
+	{ "1, 14, 1119", &g_Offsets_v1_14_1119 },
 	{ "1, 14, 0715", &g_Offsets_v1_14_0715 },
 	{ "1, 14, 0425", nullptr               },
 	{ "1, 14, 0227", nullptr               },
