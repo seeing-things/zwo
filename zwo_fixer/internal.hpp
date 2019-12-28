@@ -106,6 +106,28 @@ static inline void Msg(Color color, const char *fmt, ...)
 // =============================================================================
 
 
+// INTERNAL error state information ============================================
+
+enum LibraryError
+{
+	LIBERR_OK = 0,
+	LIBERR_LIBASICAMERA2_NOTINMEMORY,   // failed to find libASICamera2.so in the list of loaded libraries reported by dl_iterate_phdr
+	LIBERR_LIBASICAMERA2_OPENFAILED,    // failed to get a handle to libASICamera2.so via a call to dlopen, despite dl_iterate_phdr having indicated its presence
+	LIBERR_ASIGETSDKVERSION_NOTFOUND,   // failed failed to locate the ASIGetSDKVersion function via a call to dlsym
+	LIBERR_ASIGETSDKVERSION_RETNULLPTR, // got nullptr return value when calling ASIGetSDKVersion
+	LIBERR_VERSION_NOTRECOGNIZED,       // version reported by ASIGetSDKVersion was not in our list of known library versions
+	LIBERR_VERSION_NOTSUPPORTED,        // version reported by ASIGetSDKVersion was a known library version, however we haven't implemented support for that version
+};
+
+// after at least one call has been made to IsLibASILoadedAndSupported():
+// - if everything is fine, then this will remain LIBERR_OK
+// - if something went wrong, then this will be set to the enum value corresponding to what went wrong
+//   (the first error encountered will halt the load/support checking process, so only one error will ever be relevant)
+static inline g_LibError = LIBERR_OK;
+
+// =============================================================================
+
+
 // libASICamera2 versions, offsets, etc ========================================
 
 using OffsetMap_t  = std::unordered_map<std::string, uintptr_t>;
@@ -139,20 +161,26 @@ static const VersionMap_t g_KnownLibASIVersions = {
 	{ "0,  6, 0328", nullptr               },
 };
 
-static const dl_phdr_info *g_LibASIInfo    = nullptr;
-static       void         *g_LibASIHandle  = nullptr;
-static const char         *g_LibASIVersion = nullptr;
-static const OffsetMap_t  *g_LibASIOffsets = nullptr;
+#error look into whether we can safely close g_LibASIHandle upon .fini / [[gnu::destructor]] instead of just leaking the handle
 
+static inline const dl_phdr_info *g_LibASIInfo    = nullptr;
+static inline       void         *g_LibASIHandle  = nullptr;
+static inline const char         *g_LibASIVersion = nullptr;
+static inline const OffsetMap_t  *g_LibASIOffsets = nullptr;
+
+#error rework this function so that ON EVERY RUN, it re-ensures that libASICamera2 is still in memory (so that if we UNLOAD libraries in the wrong order, we don't explode things)
+[[gnu::noinline]]
 static inline bool IsLibASILoadedAndSupported()
 {
-	static bool s_Loaded    = false;
-	static bool s_Supported = false;
-	
-	static bool s_First = true;
-	if (s_First) {
+	// only run these checks upon the first call; otherwise, just return the cached value of g_LibError
+	static bool s_FirstCall = true;
+	if (s_FirstCall) {
+		s_FirstCall = false;
+		
+		#error TODO: add another check (add at first position in the error enum) for if we find MORE THAN ONE instance of libASICamera2 in memory
+		#error (and add an appropriate error message indicating how many instances we did find)
 		dl_iterate_phdr(
-			[](dl_phdr_info *info, size_t size, void *data) -> int{
+			[](dl_phdr_info *info, size_t size, void *data) -> int {
 				(void)data;
 				
 				if (info == nullptr)                                        return 0;
@@ -191,34 +219,38 @@ static inline bool IsLibASILoadedAndSupported()
 								s_Supported = true;
 							} else {
 								Msg(Color::RED, "Init failure: library loaded, but version \"%s\" not supported\n", g_LibASIVersion);
+								#error 
 							}
 						} else {
 							Msg(Color::RED, "Init failure: library loaded, but version \"%s\" not recognized\n", g_LibASIVersion);
 						}
 					} else {
+						g_LibError = LIBERR_ASIGETSDKVERSION_NOTFOUND;
 						Msg(Color::RED, "Init failure: library loaded, but ASIGetSDKVersion returned nullptr\n");
 					}
 				} else {
+					g_LibError = LIBERR_ASIGETSDKVERSION_NOTFOUND;
 					Msg(Color::RED, "Init failure: library loaded, but ASIGetSDKVersion not found (dlsym)\n");
 				}
 			} else {
-				Msg(Color::RED, "Init failure: failed to load library\n");
+				g_LibError = LIBERR_LIBASICAMERA2_OPENFAILED;
+				Msg(Color::RED, "Init failure: failed to load library (dlopen)\n");
 			}
 		} else {
-			Msg(Color::RED, "Init failure: failed to locate library in memory\n");
+			g_LibError = LIBERR_LIBASICAMERA2_NOTINMEMORY;
+			Msg(Color::RED, "Init failure: failed to locate library in memory (dl_iterate_phdr)\n");
 		}
 		
-		s_First = false;
 	}
 	
-	return (s_Loaded && s_Supported);
+	return (g_LibError == LIBERR_OK);
 }
 
 static inline uintptr_t GetAddr(const std::string& name)
 {
 	if (!IsLibASILoadedAndSupported()) return 0;
 	
-	// will attempt to throw if not present in the map
+	// this will attempt to throw if 'name' is not present in the g_LibASIOffsets map
 	return static_cast<uintptr_t>(g_LibASIInfo->dlpi_addr) + g_LibASIOffsets->at(name);
 }
 
@@ -265,7 +297,7 @@ private:
 
 // only allow function pointers; and disallow non-static member function pointers
 // (don't want any 'this' ptr crap, just a nice simple 64-bit func ptr)
-//#define STATIC_FUNC_SFINAE std::enable_if_t<std::is_function_v<T> && !std::is_member_pointer_v<T>, T>
+#define STATIC_FUNC_SFINAE(T) std::enable_if_t<std::is_function_v<T> && !std::is_member_pointer_v<T>, T>
 
 enum PLTHookMode : uint_fast8_t
 {
@@ -275,17 +307,30 @@ enum PLTHookMode : uint_fast8_t
 	PLTHOOK_DEFAULT = 0,
 };
 
+#error TODO: finish this!
+#error TODO: make this a member variable of each PLTHook!
+#error TODO: make it possible for the public-facing API to get a list of [name, error_bits] entries!
+enum PLTHookErrors : uint_fast8_t
+{
+	PLTHOOK_ERROR_INSTALL_SETWRITABLE_FAIL     = (1 << 0), // TODO
+	PLTHOOK_ERROR_INSTALL_SETEXECUTABLE_FAIL   = (1 << 1), // TODO
+	
+	PLTHOOK_ERROR_UNINSTALL_SETWRITABLE_FAIL   = (1 << 2), // TODO
+	PLTHOOK_ERROR_UNINSTALL_SETEXECUTABLE_FAIL = (1 << 3), // TODO
+	
+	PLTHOOK_ERROR_NONE = 0,
+};
+
 class PLTHook : public AutoInstanceList<PLTHook>
 {
 public:
-//	template<typename T>
-//	PLTHook(uintptr_t plt_entry_offset, STATIC_FUNC_SFINAE hook_func) :
-//		m_PLTEntryOffset(plt_entry_offset), m_HookFuncAddr((uint64_t)hook_func) {}
-	
-	template<typename F_RET, typename... F_PARAMS>
-	PLTHook(const char *name, uintptr_t plt_entry_addr, F_RET (*hook_func)(F_PARAMS...), PLTHookMode mode = PLTHOOK_DEFAULT) :
+	template<typename T>
+	PLTHook(const char *name, uintptr_t plt_entry_addr, STATIC_FUNC_SFINAE(T) hook_func, PLTHookMode mode = PLTHOOK_DEFAULT) :
 		m_Name(name), m_PLTEntryPtr((uint8_t *)plt_entry_addr), m_HookFuncAddr((uint64_t)hook_func), m_Mode(mode)
 	{
+	//	// non-SFINAE sanity check for disallowing hook func ptrs that are member functions
+	//	static_assert(std::is_function_v<T> && !std::is_member_pointer_v<T>);
+		
 		if (!IsLibASILoadedAndSupported()) return;
 		
 		Msg(Color::WHITE, "PLTHook(%s): constructed\n", m_Name);
@@ -298,6 +343,7 @@ public:
 	
 	~PLTHook()
 	{
+		#error TODO: do a library-unload-time check here ~~instead~~ in addition: ensure that libASICamera2 is STILL THERE and STILL AT THE SAME ADDRESS AS BEFORE!
 		if (!IsLibASILoadedAndSupported()) return;
 		
 		if ((m_Mode & PLTHOOK_PERSIST) == 0) {
@@ -309,11 +355,18 @@ public:
 	void Install()
 	{
 		if (!IsLibASILoadedAndSupported()) return;
+		if (m_Installed)                   return;
 		
-		if (m_Installed) return;
-		m_Installed = true;
+		if (InErrorState()) {
+			Msg(Color::RED, "PLTHook(%s): cannot install: already in error state", m_Name);
+			return;
+		}
 		
-		SetWritable(true);
+		if (!SetWritable()) {
+			Msg(Color::RED, "PLTHook(%s): installation cannot proceed: failed to set memory protection to RW-", m_Name);
+			m_Errors |= PLTHOOK_ERROR_INSTALL_SETWRITABLE_FAIL;
+			return;
+		}
 		
 		Backup();
 		
@@ -322,16 +375,22 @@ public:
 		{
 			explicit AbsJmpThunk(uint64_t target) : Target(target) {}
 			
-			uint8_t  Jmp [6] { 0xFF, 0x25, 0x02, 0x00, 0x00, 0x00 }; // jmp [rip+0x2]
-			uint8_t  Int3[2] { 0xCC, 0xCC };                         // int3; int3
-			uint64_t Target;                                         // dq Target  <-- QWORD-aligned!
+			uint8_t  Jmp [6] { 0xFF, 0x25, 0x02, 0x00, 0x00, 0x00 }; // +0x00  jmp [rip+0x2]
+			uint8_t  Int3[2] { 0xCC, 0xCC };                         // +0x06  int3; int3
+			uint64_t Target;                                         // +0x08  dq Target  <-- QWORD-aligned!
 		};
 		static_assert(sizeof(AbsJmpThunk) == 0x10);
+		static_assert(offsetof(AbsJumpThunk, Target) == 0x08);
 		
 		AbsJmpThunk thunk(m_HookFuncAddr);
 		memcpy(m_PLTEntryPtr, &thunk, sizeof(thunk));
+		m_Installed = true;
 		
-		SetWritable(false);
+		if (!SetExecutable()) {
+			Msg(Color::RED, "PLTHook(%s): installation failed catastrophically: failed to revert memory protections from RW- to R-X", m_Name);
+			m_Errors |= PLTHOOK_ERROR_INSTALL_SETEXECUTABLE_FAIL;
+			return;
+		}
 		
 		Msg(Color::WHITE, "PLTHook(%s): installed\n", m_Name);
 	}
@@ -339,31 +398,49 @@ public:
 	void Uninstall()
 	{
 		if (!IsLibASILoadedAndSupported()) return;
+		if (!m_Installed)                  return;
 		
-		if (!m_Installed) return;
+		if (InErrorState()) {
+			Msg(Color::RED, "PLTHook(%s): cannot uninstall: already in error state", m_Name);
+			return;
+		}
+		
+		if (!SetWritable()) {
+			Msg(Color::RED, "PLTHook(%s): uninstallation cannot proceed: failed to set memory protection to RW-", m_Name);
+			m_Errors |= PLTHOOK_ERROR_UNINSTALL_SETWRITABLE_FAIL;
+			return;
+		}
+		
+		Restore();
 		m_Installed = false;
 		
-		SetWritable(true);
-		Restore();
-		SetWritable(false);
+		if (!SetExecutable()) {
+			Msg(Color::RED, "PLTHook(%s): uninstallation failed catastrophically: failed to revert memory protections from RW- to R-X", m_Name);
+			m_Errors |= PLTHOOK_ERROR_UNINSTALL_SETEXECUTABLE_FAIL;
+			return;
+		}
 		
 		Msg(Color::WHITE, "PLTHook(%s): uninstalled\n", m_Name);
 	}
 	
 private:
-	void SetWritable(bool writable)
+	// strict W^X policy: R-X or RW- only; no RWX ever!
+	bool SetWritable()   { return SetMemProt(PROT_READ | PROT_WRITE); }
+	bool SetExecutable() { return SetMemProt(PROT_READ | PROT_EXEC);  }
+	
+	bool SetMemProt(int prot)
 	{
 		auto ptr = (void *)((uintptr_t)m_PLTEntryPtr & ~(PageSize() - 1));
-		int prot = (writable ? (PROT_READ | PROT_WRITE) : (PROT_READ | PROT_EXEC));
+		if (mprotect(ptr, 0x10, prot) == 0) return true;
 		
-		if (mprotect(ptr, 0x10, prot) != 0) {
-			Msg(Color::RED, "PLTHook(%s): mprotect(%p, 0x10, 0x%X) failed: %s\n", m_Name, ptr, prot, strerror(errno));
-			exit(1); // <-- TODO: see if there's anything we can do to avoid this
-		}
+		Msg(Color::RED, "PLTHook(%s): mprotect(%p, 0x10, 0x%X) failed: %s\n", m_Name, ptr, prot, strerror(errno));
+		return false;
 	}
 	
 	void Backup()        { memcpy(m_Backup, m_PLTEntryPtr, 0x10); }
 	void Restore() const { memcpy(m_PLTEntryPtr, m_Backup, 0x10); }
+	
+	bool InErrorState() const { return (m_Errors != PLTHOOK_ERROR_NONE); }
 	
 	const char *m_Name;
 	uint8_t *m_PLTEntryPtr;
@@ -372,6 +449,19 @@ private:
 	
 	uint8_t m_Backup[16];
 	bool m_Installed = false;
+	
+	PLTHookErrors m_Errors = PLTHOOK_ERROR_NONE;
 };
 
+#undef STATIC_FUNC_SFINAE
+
 // =============================================================================
+
+#warning TODO: do some tests to ensure the following
+// - put manual breakpoints (int3) into object ctors and dtors
+// - test that init and fini breakpoints are hit in gdb with:
+//   - a program linked against libzwo_fixer.so at link time with the linker
+//   - a program that explicitly uses dlopen to load libzwo_fixer.so
+//   - a program that explicitly uses dlopen to load libzwo_fixer.so and dlclose to unload libzwo_fixer.so
+//   - programs that use dlopen/dlclose for both libASICamera2 and libzwo_fixer.so and which do things in the wrong order!
+// - check that we break at appropriate times and that things work appropriately

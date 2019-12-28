@@ -94,5 +94,8 @@ bool ZWOFixerInit()
 	Msg((ok ? Color::GREEN : Color::RED), "ZWOFixerInit: %s\n", (ok ? "OK" : "FAIL"));
 	return ok;
 }
+#error redo this function completely
+#error - new return type
+#error - look at all of g_LibError stuff and synthesize a 
 
 // =============================================================================
