@@ -38,7 +38,7 @@ setup(
 
     keywords='astronomy telescopes zwo asi',
 
-    python_requires='python>=3.6',
+    python_requires='>=3.6',
 
     install_requires=[
         'numpy',
