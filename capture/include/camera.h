@@ -10,6 +10,6 @@ namespace camera
     constexpr int EXPOSURE_MIN_US = 32; // 32 is the minimum value for this camera
     constexpr int EXPOSURE_MAX_US = 16'667; // Max for ~60 FPS
 
-    void init_camera(ASI_CAMERA_INFO &CamInfo);
+    void init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name);
     void run_camera(ASI_CAMERA_INFO &CamInfo);
 }

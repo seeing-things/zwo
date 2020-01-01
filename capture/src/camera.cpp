@@ -1,6 +1,8 @@
 #include "camera.h"
 #include <cstdio>
+#include <cstring>
 #include <deque>
+#include <vector>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
@@ -76,7 +78,7 @@ static const char *asi_error_str(ASI_ERROR_CODE code)
 }
 
 
-void camera::init_camera(ASI_CAMERA_INFO &CamInfo)
+void camera::init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name)
 {
     ASI_ERROR_CODE asi_rtn;
 
@@ -85,13 +87,51 @@ void camera::init_camera(ASI_CAMERA_INFO &CamInfo)
     {
         errx(1, "No cameras connected.");
     }
-    else if (num_devices > 1)
+    else
     {
-        warnx("Found %d cameras, first of these selected.\n", num_devices);
-    }
+        if (cam_name == nullptr) {
+            asi_rtn = ASIGetCameraProperty(&CamInfo, 0);
+            if (asi_rtn != ASI_SUCCESS) {
+                errx(1, "ASIGetCameraProperty error: %s", asi_error_str(asi_rtn));
+            }
 
-    // Select the first camera
-    ASIGetCameraProperty(&CamInfo, 0);
+            warnx("Found %d cameras; arbitrarily selecting %s.",
+                num_devices, CamInfo.Name);
+        } else {
+            // TODO: check both ASIGetID and ASIGetSerialNumber with our cameras
+            // and see if they (a) work, and (b) are useful for camera selection.
+
+            std::vector<ASI_CAMERA_INFO> matches;
+            for (int i = 0; i < num_devices; ++i) {
+                ASI_CAMERA_INFO info;
+
+                asi_rtn = ASIGetCameraProperty(&info, i);
+                if (asi_rtn != ASI_SUCCESS) {
+                    errx(1, "ASIGetCameraProperty error: %s", asi_error_str(asi_rtn));
+                }
+
+                if (strcasestr(info.Name, cam_name) != nullptr) {
+                    matches.push_back(info);
+                }
+            }
+
+            if (matches.empty()) {
+                errx(1, "Found %d cameras; no camera matched \"%s\"",
+                    num_devices, cam_name);
+            } else if (matches.size() != 1) {
+                warnx("Found %d cameras; %zu different cameras matched \"%s\":",
+                    num_devices, matches.size(), cam_name);
+                for (const auto& info : matches) {
+                    warnx("- %s", info.Name);
+                }
+                exit(1);
+            }
+
+            memcpy(&CamInfo, &matches.front(), sizeof(CamInfo));
+            warnx("Found %d cameras; exactly one camera matched \"%s\": %s",
+                num_devices, cam_name, CamInfo.Name);
+        }
+    }
 
     asi_rtn = ASIOpenCamera(CamInfo.CameraID);
     if (asi_rtn != ASI_SUCCESS)

@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <csignal>
+#include <cstring>
 #include <deque>
 #include <thread>
 #include <pthread.h>
@@ -81,6 +82,16 @@ int main(int argc, char *argv[])
 
     printf("main thread id: %ld\n", syscall(SYS_gettid));
 
+    const char *cam_name = nullptr;
+    const char *filename = nullptr;
+    for (int i = 1; i < argc; ++i) {
+        if (strncmp(argv[i], "camera=", 7) == 0) {
+            cam_name = argv[i] + 7;
+        } else if (strncmp(argv[i], "file=", 5) == 0) {
+            filename = argv[i] + 5;
+        }
+    }
+
     /*
      * Set real-time priority for the main thread. All threads created later, including by the ASI
      * library, will inherit this priority.
@@ -91,7 +102,7 @@ int main(int argc, char *argv[])
     (void)zwo_fixer_ok; // currently unused
 
     ASI_CAMERA_INFO CamInfo;
-    camera::init_camera(CamInfo);
+    camera::init_camera(CamInfo, cam_name);
 
     // Create pool of frame buffers
     Frame::IMAGE_SIZE_BYTES = CamInfo.MaxWidth * CamInfo.MaxHeight;
@@ -106,7 +117,7 @@ int main(int argc, char *argv[])
     // Start threads
     static std::thread write_to_disk_thread(
         write_to_disk,
-        (argc > 1) ? (argv[1]) : (nullptr),
+        filename,
         CamInfo.MaxWidth,
         CamInfo.MaxHeight
     );
