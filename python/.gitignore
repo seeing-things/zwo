@@ -1,0 +1,7 @@
+__pycache__/
+asi.egg-info/
+build/
+_asi.*.so
+asi.py
+asi_wrap.c
+
