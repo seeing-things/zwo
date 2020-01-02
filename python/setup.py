@@ -1,6 +1,10 @@
 from setuptools import setup, Extension
 from setuptools.command.build_py import build_py as _build_py
 
+# This may fail if numpy isn't installed at setup-time; dunno how to deal with that.
+# Supposedly, 'setup_requires' should have us covered, but I sort of doubt it.
+from numpy.distutils.misc_util import get_numpy_include_dirs
+
 # Have to define a new class that is used for the build_py step because build_py expects to find
 # asi.py, but that isn't generated until build_ext is run. Normally build_ext is run after 
 # build_py. When this class is used for build_py, build_ext is run first. See also the cmdclass
@@ -40,6 +44,10 @@ setup(
 
     python_requires='>=3.6',
 
+    setup_requires=[
+        'numpy',
+    ],
+
     install_requires=[
         'numpy',
     ],
@@ -50,6 +58,7 @@ setup(
             ['asi.i'],
             swig_opts=['-modern', '-I/usr/include'],
             libraries=['ASICamera2'],
+            include_dirs=get_numpy_include_dirs(),
         )
     ],
 
