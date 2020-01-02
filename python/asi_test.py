@@ -7,7 +7,7 @@ import time
 import unittest
 import random
 import numpy as np
-import scipy.misc
+import imageio
 
 # pylint: disable=import-error
 import asi
@@ -164,7 +164,7 @@ class TestASI(unittest.TestCase):
             size=(self.info.MaxHeight, self.info.MaxWidth),
             dtype='uint8'
         )
-        scipy.misc.imsave('/tmp/test_darkframe.bmp', darkframe)
+        imageio.imwrite('/tmp/test_darkframe.bmp', darkframe)
         self.assertEqual(asi.ASIEnableDarkSubtract(self.info.CameraID, '/tmp/test_darkframe.bmp'),
                          asi.ASI_SUCCESS)
         self.assertEqual(asi.ASIDisableDarkSubtract(self.info.CameraID), asi.ASI_SUCCESS)
