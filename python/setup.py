@@ -1,8 +1,6 @@
 from setuptools import setup, Extension
 from setuptools.command.build_py import build_py as _build_py
 
-# This may fail if numpy isn't installed at setup-time; dunno how to deal with that.
-# Supposedly, 'setup_requires' should have us covered, but I sort of doubt it.
 from numpy.distutils.misc_util import get_numpy_include_dirs
 
 # Have to define a new class that is used for the build_py step because build_py expects to find
