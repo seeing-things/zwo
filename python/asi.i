@@ -115,6 +115,9 @@ def ASIGetSupportedVideoFormats(camera_info):
             supported_formats.append(format)
     return supported_formats
 
+class ASIError(Exception):
+    """Raised by ASICheck() when the status code returned by an API call is not ASI_SUCCESS"""
+
 def ASICheck(return_values):
     """Check status return code from ASICamera2 API calls for errors.
 
@@ -130,7 +133,7 @@ def ASICheck(return_values):
         value from the API call, this function returns None.
 
     Raises:
-        RuntimeError if the status code was something other than ASI_SUCCESS.
+        ASIError if the status code was something other than ASI_SUCCESS.
     """
     if isinstance(return_values, (tuple, list)):
         status_code = return_values[0]
@@ -140,7 +143,7 @@ def ASICheck(return_values):
         return_values = None
 
     if status_code != _asi.ASI_SUCCESS:
-        raise RuntimeError('return code: {}'.format(status_code))
+        raise ASIError('ASI return code: {}'.format(status_code))
 
     return return_values
 %}
