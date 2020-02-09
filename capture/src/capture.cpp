@@ -60,7 +60,15 @@ static void set_thread_priority(pthread_t thread, int policy, int priority)
     sch_params.sched_priority = priority;
     if ((errno = pthread_setschedparam(thread, policy, &sch_params)))
     {
-        err(1, "Failed to set thread priority");
+        err(1, "Failed to set thread priority (%d, %d)", policy, priority);
+    }
+}
+
+static void set_thread_name(pthread_t thread, const char *name)
+{
+    if ((errno = pthread_setname_np(thread, name)))
+    {
+        warn("Failed to set thread name (\"%s\")", name);
     }
 }
 
@@ -86,6 +94,7 @@ int main(int argc, char *argv[])
      * library, will inherit this priority.
      */
     set_thread_priority(pthread_self(), SCHED_RR, 10);
+    set_thread_name(pthread_self(), "capture:main");
 
     bool zwo_fixer_ok = ZWOFixerInit();
     (void)zwo_fixer_ok; // currently unused
@@ -116,6 +125,10 @@ int main(int argc, char *argv[])
     // These threads do not need real-time priority
     set_thread_priority(preview_thread.native_handle(), SCHED_OTHER, 0);
     set_thread_priority(agc_thread.native_handle(), SCHED_OTHER, 0);
+
+    set_thread_name(write_to_disk_thread.native_handle(), "capture:disk");
+    set_thread_name(preview_thread.native_handle(), "capture:preview");
+    set_thread_name(agc_thread.native_handle(), "capture:gain");
 
     // Get frames from camera and dispatch them to the other threads
     camera::run_camera(CamInfo);
