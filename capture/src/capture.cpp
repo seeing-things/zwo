@@ -84,11 +84,24 @@ int main(int argc, char *argv[])
 
     const char *cam_name = nullptr;
     const char *filename = nullptr;
-    for (int i = 1; i < argc; ++i) {
-        if (strncmp(argv[i], "camera=", 7) == 0) {
+    for (int i = 1; i < argc; ++i)
+    {
+        if (strncmp(argv[i], "camera=", 7) == 0)
+        {
             cam_name = argv[i] + 7;
-        } else if (strncmp(argv[i], "file=", 5) == 0) {
+        }
+        else if (strncmp(argv[i], "file=", 5) == 0)
+        {
             filename = argv[i] + 5;
+        }
+        else
+        {
+            errx(
+                1,
+                "Error: Program option '%s' not recognized\n"
+                "Usage: %s file=[output_filename.ser] camera=[camera name]",
+                argv[i], argv[0]
+            );
         }
     }
 
