@@ -26,6 +26,11 @@ SERFile::SERFile(
         bytes_per_frame_ *= 3;
     }
 
+    if (access(filename, F_OK) != -1)
+    {
+        errx(1, "File %s already exists! Refusing to overwrite it.", filename);
+    }
+
     fd_ = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0644);
     if (fd_ < 0)
     {
