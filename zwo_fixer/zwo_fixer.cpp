@@ -50,7 +50,7 @@ when -EOVERFLOW happens:
 // This fixes that idiocy.
 PLTHook plthook__libusb_cancel_transfer(
 	"libusb_cancel_transfer",
-	GetAddr(".plt:libusb_cancel_transfer"),
+	GetAddr(".got.plt:libusb_cancel_transfer"),
 	+[](libusb_transfer *transfer) -> int {
 		int retval = libusb_cancel_transfer(transfer);
 		

@@ -91,7 +91,7 @@
 // Linux
 #include <unistd.h>
 //#include <fcntl.h>
-#include <sys/mman.h>
+//#include <sys/mman.h>
 
 // BSD
 //#include <bsd/err.h>
@@ -168,8 +168,8 @@ using VersionMap_t = std::map<std::string, const OffsetMap_t *>;
 
 static const OffsetMap_t g_Offsets_v1_16_3 = {
 #if FIXER_X64
-	{ ".plt:libusb_cancel_transfer",       0x0516B0 },
 	{ ".text:callbackUSBTransferComplete", 0x187A20 },
+	{ ".got.plt:libusb_cancel_transfer",   0x3DECB0 },
 	{ ".data:lin_XferLen",                 0x3E7580 },
 	{ ".bss:lin_XferCallbacked",           0x437D14 },
 #endif
@@ -187,8 +187,8 @@ static const OffsetMap_t g_Offsets_v1_14_1227;
 
 static const OffsetMap_t g_Offsets_v1_14_1119 = {
 #if FIXER_X64
-	{ ".plt:libusb_cancel_transfer",       0x046D30 },
 	{ ".text:callbackUSBTransferComplete", 0x1514D0 },
+	{ ".got.plt:libusb_cancel_transfer",   0x3993D0 },
 	{ ".data:lin_XferLen",                 0x3A1540 },
 	{ ".bss:lin_XferCallbacked",           0x3F1B74 },
 #endif
@@ -196,8 +196,8 @@ static const OffsetMap_t g_Offsets_v1_14_1119 = {
 
 static const OffsetMap_t g_Offsets_v1_14_0715 = {
 #if FIXER_X64
-	{ ".plt:libusb_cancel_transfer",       0x043D28 },
 	{ ".text:callbackUSBTransferComplete", 0x1402E0 },
+	{ ".got.plt:libusb_cancel_transfer",   0x385390 },
 	{ ".data:lin_XferLen",                 0x38D260 },
 	{ ".bss:lin_XferCallbacked",           0x3DD854 },
 #endif
@@ -210,8 +210,8 @@ static const OffsetMap_t g_Offsets_v1_13_0821;
 
 static const OffsetMap_t g_Offsets_v0_07_0503 = {
 #if FIXER_X64
-	{ ".plt:libusb_cancel_transfer",       0x039588 },
 	{ ".text:callbackUSBTransferComplete", 0x0FB750 },
+	{ ".got.plt:libusb_cancel_transfer",   0x337DC8 },
 	{ ".data:lin_XferLen",                 0x33F3E0 },
 	{ ".bss:lin_XferCallbacked",           0x37B8D4 },
 #endif
@@ -371,9 +371,8 @@ private:
 
 // Helper: PLT-hooking class ===================================================
 
-// only allow function pointers; and disallow non-static member function pointers
-// (don't want any 'this' ptr crap, just a nice simple 64-bit func ptr)
-//#define STATIC_FUNC_SFINAE std::enable_if_t<std::is_function_v<T> && !std::is_member_pointer_v<T>, T>
+// NOTE: potentially consider using std::hardware_(con|de)structive_interference_size
+//       to deduce L1D cache line size info
 
 enum PLTHookMode : uint_fast8_t
 {
@@ -385,16 +384,33 @@ enum PLTHookMode : uint_fast8_t
 
 class PLTHook : public AutoInstanceList<PLTHook>
 {
-public:
-//	template<typename T>
-//	PLTHook(uintptr_t plt_entry_offset, STATIC_FUNC_SFINAE hook_func) :
-//		m_PLTEntryOffset(plt_entry_offset), m_HookFuncAddr((uint64_t)hook_func) {}
+private:
+#if FIXER_X64
+	static constexpr size_t PLT_ENTRY_SIZE     = 16;
+	static constexpr size_t PLT_ENTRY_ALIGN    =  4;
+	static constexpr size_t GOT_PLT_SLOT_SIZE  =  8;
+	static constexpr size_t GOT_PLT_SLOT_ALIGN =  8;
+#endif
 	
+#if FIXER_SUPPORTED
+	// TODO: use C++ <atomic>, if we can ever figure out how the hell to use it properly with pre-existent external pointers...
+	static_assert(__atomic_always_lock_free(GOT_PLT_SLOT_SIZE, nullptr));
+	// NOTE: ouch, we don't appear to pass the __atomic_always_lock_free test with GOT_PLT_SLOT_ALIGN :(
+	
+	static constexpr int MEM_ORDER = __ATOMIC_SEQ_CST;
+#endif
+	
+public:
 	template<typename F_RET, typename... F_PARAMS>
-	PLTHook(const char *name, uintptr_t plt_entry_addr, F_RET (*hook_func)(F_PARAMS...), PLTHookMode mode = PLTHOOK_DEFAULT) :
-		m_Name(name), m_PLTEntryPtr((uint8_t *)plt_entry_addr), m_HookFuncAddr((uint64_t)hook_func), m_Mode(mode)
+	PLTHook(const char *name, uintptr_t got_plt_slot_addr, F_RET (*hook_func)(F_PARAMS...), PLTHookMode mode = PLTHOOK_DEFAULT) :
+		m_Name(name), m_GOTPLTSlotPtr((uintptr_t *)got_plt_slot_addr), m_HookFuncAddr((uintptr_t)hook_func), m_Mode(mode)
 	{
 		if (!IsLibASILoadedAndSupported()) return;
+		
+#if !FIXER_SUPPORTED
+		Msg(Color::YELLOW, "PLTHook(%s): architecture not supported\n", m_Name);
+		return;
+#endif
 		
 		Msg(Color::WHITE, "PLTHook(%s): constructed\n", m_Name);
 		if ((mode & PLTHOOK_MANUAL) == 0) {
@@ -414,6 +430,7 @@ public:
 		Msg(Color::WHITE, "PLTHook(%s): destructed\n", m_Name);
 	}
 	
+#if FIXER_SUPPORTED
 	void Install()
 	{
 		if (!IsLibASILoadedAndSupported()) return;
@@ -421,25 +438,8 @@ public:
 		if (m_Installed) return;
 		m_Installed = true;
 		
-		SetWritable(true);
-		
-		Backup();
-		
-		// custom absolute jump thunk: uses 14 out of 16 available bytes in a .PLT section entry
-		struct AbsJmpThunk
-		{
-			explicit AbsJmpThunk(uint64_t target) : Target(target) {}
-			
-			uint8_t  Jmp [6] { 0xFF, 0x25, 0x02, 0x00, 0x00, 0x00 }; // jmp [rip+0x2]
-			uint8_t  Int3[2] { 0xCC, 0xCC };                         // int3; int3
-			uint64_t Target;                                         // dq Target  <-- QWORD-aligned!
-		};
-		static_assert(sizeof(AbsJmpThunk) == 0x10);
-		
-		AbsJmpThunk thunk(m_HookFuncAddr);
-		memcpy(m_PLTEntryPtr, &thunk, sizeof(thunk));
-		
-		SetWritable(false);
+		// ATOMIC EXCHANGE OPERATION
+		m_SlotBackup = __atomic_exchange_n(m_GOTPLTSlotPtr, m_HookFuncAddr, MEM_ORDER);
 		
 		Msg(Color::WHITE, "PLTHook(%s): installed\n", m_Name);
 	}
@@ -451,35 +451,26 @@ public:
 		if (!m_Installed) return;
 		m_Installed = false;
 		
-		SetWritable(true);
-		Restore();
-		SetWritable(false);
+		// ATOMIC STORE OPERATION
+		__atomic_store_n(m_GOTPLTSlotPtr, m_SlotBackup, MEM_ORDER);
 		
 		Msg(Color::WHITE, "PLTHook(%s): uninstalled\n", m_Name);
 	}
+#else
+	void Install()   {}
+	void Uninstall() {}
+#endif
 	
 private:
-	void SetWritable(bool writable)
-	{
-		auto ptr = (void *)((uintptr_t)m_PLTEntryPtr & ~(PageSize() - 1));
-		int prot = (writable ? (PROT_READ | PROT_WRITE) : (PROT_READ | PROT_EXEC));
-		
-		if (mprotect(ptr, 0x10, prot) != 0) {
-			Msg(Color::RED, "PLTHook(%s): mprotect(%p, 0x10, 0x%X) failed: %s\n", m_Name, ptr, prot, strerror(errno));
-			exit(1); // <-- TODO: see if there's anything we can do to avoid this
-		}
-	}
-	
-	void Backup()        { memcpy(m_Backup, m_PLTEntryPtr, 0x10); }
-	void Restore() const { memcpy(m_PLTEntryPtr, m_Backup, 0x10); }
-	
 	const char *m_Name;
-	uint8_t *m_PLTEntryPtr;
-	uint64_t m_HookFuncAddr;
+	uintptr_t  *m_GOTPLTSlotPtr;
+	uintptr_t   m_HookFuncAddr;
 	PLTHookMode m_Mode;
 	
-	uint8_t m_Backup[16];
-	bool m_Installed = false;
+#if FIXER_SUPPORTED
+	bool      m_Installed = false;
+	uintptr_t m_SlotBackup;
+#endif
 };
 
 // =============================================================================
