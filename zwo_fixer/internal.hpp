@@ -16,8 +16,8 @@
 // Linux    x64      SUPPORTED
 // Linux    ARMv5  UNSUPPORTED (maybe later)
 // Linux    ARMv6  UNSUPPORTED (maybe later)
-// Linux    ARMv7  UNSUPPORTED (maybe later)
-// Linux    ARMv8    SUPPORTED
+// Linux    ARMv7    SUPPORTED (untested; Thumb mode transitions are evil)
+// Linux    ARMv8    SUPPORTED (untested)
 // Windows  x86    UNSUPPORTED (probably never)
 // Windows  x64    UNSUPPORTED (probably never)
 // MacOS    x86    UNSUPPORTED (probably never)
@@ -41,8 +41,7 @@
 		#warning functionality will be disabled!
 	#elif defined(__arm__) && defined(__ARM_ARCH) && __ARM_ARCH == 7
 		#define FIXER_ARMV7 1
-		#warning zwo_fixer does not support the ARMv7 architecture (yet)!
-		#warning functionality will be disabled!
+		#define FIXER_SUPPORTED 1
 	#elif defined(__aarch64__) && defined(__ARM_ARCH) && __ARM_ARCH == 8
 		#define FIXER_ARMV8     1
 		#define FIXER_SUPPORTED 1
@@ -171,6 +170,11 @@ static const OffsetMap_t g_Offsets_v1_16_3 = {
 	{ ".got.plt:libusb_cancel_transfer",   0x3DECB0 },
 	{ ".data:lin_XferLen",                 0x3E7580 },
 	{ ".bss:lin_XferCallbacked",           0x437D14 },
+#elif FIXER_ARMV7
+	{ ".text:callbackUSBTransferComplete", 0x10E498 },
+	{ ".got.plt:libusb_cancel_transfer",   0x13B964 }, // actually in .got (there is no .got.plt)
+	{ ".data:lin_XferLen",                 0x141234 },
+	{ ".bss:lin_XferCallbacked",           0x181DF0 },
 #elif FIXER_ARMV8
 	{ ".text:callbackUSBTransferComplete", 0x1664A0 },
 	{ ".got.plt:libusb_cancel_transfer",   0x1D44C0 },
@@ -195,6 +199,11 @@ static const OffsetMap_t g_Offsets_v1_14_1119 = {
 	{ ".got.plt:libusb_cancel_transfer",   0x3993D0 },
 	{ ".data:lin_XferLen",                 0x3A1540 },
 	{ ".bss:lin_XferCallbacked",           0x3F1B74 },
+#elif FIXER_ARMV7
+	{ ".text:callbackUSBTransferComplete", 0x0E8118 },
+	{ ".got.plt:libusb_cancel_transfer",   0x11460C }, // actually in .got (there is no .got.plt)
+	{ ".data:lin_XferLen",                 0x119C10 },
+	{ ".bss:lin_XferCallbacked",           0x15A740 },
 #elif FIXER_ARMV8
 	{ ".text:callbackUSBTransferComplete", 0x135760 },
 	{ ".got.plt:libusb_cancel_transfer",   0x193FB0 },
@@ -399,6 +408,11 @@ private:
 	static constexpr size_t PLT_ENTRY_ALIGN    =  4;
 	static constexpr size_t GOT_PLT_SLOT_SIZE  =  8;
 	static constexpr size_t GOT_PLT_SLOT_ALIGN =  8;
+#elif FIXER_ARMV7
+	static constexpr size_t PLT_ENTRY_SIZE     = 12;
+	static constexpr size_t PLT_ENTRY_ALIGN    =  4;
+	static constexpr size_t GOT_PLT_SLOT_SIZE  =  4;
+	static constexpr size_t GOT_PLT_SLOT_ALIGN =  4;
 #elif FIXER_ARMV8
 	static constexpr size_t PLT_ENTRY_SIZE     = 16;
 	static constexpr size_t PLT_ENTRY_ALIGN    = 16;
