@@ -10,6 +10,61 @@
 // =============================================================================
 
 
+// OS and CPU Architecture =====================================================
+
+// Linux    x86    UNSUPPORTED (maybe later)
+// Linux    x64      SUPPORTED
+// Linux    ARMv5  UNSUPPORTED (maybe later)
+// Linux    ARMv6  UNSUPPORTED (maybe later)
+// Linux    ARMv7  UNSUPPORTED (maybe later)
+// Linux    ARMv8  UNSUPPORTED (soon)
+// Windows  x86    UNSUPPORTED (probably never)
+// Windows  x64    UNSUPPORTED (probably never)
+// MacOS    x86    UNSUPPORTED (probably never)
+// MacOS    x64    UNSUPPORTED (probably never)
+
+#if defined(__linux__)
+	#if defined(__i386__)
+		#define FIXER_X86 1
+		#warning zwo_fixer does not support the x86 architecture (yet)!
+		#warning functionality will be disabled!
+	#elif defined(__x86_64__)
+		#define FIXER_X64       1
+		#define FIXER_SUPPORTED 1
+	#elif defined(__arm__) && defined(__ARM_ARCH) && __ARM_ARCH == 5
+		#define FIXER_ARMV5 1
+		#warning zwo_fixer does not support the ARMv5 architecture (yet)!
+		#warning functionality will be disabled!
+	#elif defined(__arm__) && defined(__ARM_ARCH) && __ARM_ARCH == 6
+		#define FIXER_ARMV6 1
+		#warning zwo_fixer does not support the ARMv6 architecture (yet)!
+		#warning functionality will be disabled!
+	#elif defined(__arm__) && defined(__ARM_ARCH) && __ARM_ARCH == 7
+		#define FIXER_ARMV7 1
+		#warning zwo_fixer does not support the ARMv7 architecture (yet)!
+		#warning functionality will be disabled!
+	#elif defined(__aarch64__) && defined(__ARM_ARCH) && __ARM_ARCH == 8
+		#define FIXER_ARMV8     1
+		#warning zwo_fixer does not support the ARMv8 architecture (yet)!
+		#warning functionality will be disabled!
+	#else
+		#error zwo_fixer does not support whatever CPU architecture this is!
+	#endif
+#elif defined(__APPLE__)
+	#error zwo_fixer does not support the MacOS platform!
+#elif defined(_WIN32) || defined(_WIN64)
+	#error zwo_fixer does not support the Windows platform!
+#else
+	#error zwo_fixer does not support whatever platform this is!
+#endif
+
+#ifndef FIXER_SUPPORTED
+#define FIXER_SUPPORTED 0
+#endif
+
+// =============================================================================
+
+
 // Includes ====================================================================
 
 #ifndef _GNU_SOURCE
@@ -112,10 +167,12 @@ using OffsetMap_t  = std::unordered_map<std::string, uintptr_t>;
 using VersionMap_t = std::map<std::string, const OffsetMap_t *>;
 
 static const OffsetMap_t g_Offsets_v1_16_3 = {
+#if FIXER_X64
 	{ ".plt:libusb_cancel_transfer",       0x0516B0 },
 	{ ".text:callbackUSBTransferComplete", 0x187A20 },
 	{ ".data:lin_XferLen",                 0x3E7580 },
 	{ ".bss:lin_XferCallbacked",           0x437D14 },
+#endif
 };
 
 static const OffsetMap_t g_Offsets_v1_16_2;
@@ -129,17 +186,21 @@ static const OffsetMap_t g_Offsets_v1_15_0430;
 static const OffsetMap_t g_Offsets_v1_14_1227;
 
 static const OffsetMap_t g_Offsets_v1_14_1119 = {
+#if FIXER_X64
 	{ ".plt:libusb_cancel_transfer",       0x046D30 },
 	{ ".text:callbackUSBTransferComplete", 0x1514D0 },
 	{ ".data:lin_XferLen",                 0x3A1540 },
 	{ ".bss:lin_XferCallbacked",           0x3F1B74 },
+#endif
 };
 
 static const OffsetMap_t g_Offsets_v1_14_0715 = {
+#if FIXER_X64
 	{ ".plt:libusb_cancel_transfer",       0x043D28 },
 	{ ".text:callbackUSBTransferComplete", 0x1402E0 },
 	{ ".data:lin_XferLen",                 0x38D260 },
 	{ ".bss:lin_XferCallbacked",           0x3DD854 },
+#endif
 };
 
 static const OffsetMap_t g_Offsets_v1_14_0425;
@@ -148,10 +209,12 @@ static const OffsetMap_t g_Offsets_v1_13_0930;
 static const OffsetMap_t g_Offsets_v1_13_0821;
 
 static const OffsetMap_t g_Offsets_v0_07_0503 = {
+#if FIXER_X64
 	{ ".plt:libusb_cancel_transfer",       0x039588 },
 	{ ".text:callbackUSBTransferComplete", 0x0FB750 },
 	{ ".data:lin_XferLen",                 0x33F3E0 },
 	{ ".bss:lin_XferCallbacked",           0x37B8D4 },
+#endif
 };
 
 static const OffsetMap_t g_Offsets_v0_07_0118;
