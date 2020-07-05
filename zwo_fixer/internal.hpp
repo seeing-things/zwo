@@ -17,7 +17,7 @@
 // Linux    ARMv5  UNSUPPORTED (maybe later)
 // Linux    ARMv6  UNSUPPORTED (maybe later)
 // Linux    ARMv7  UNSUPPORTED (maybe later)
-// Linux    ARMv8  UNSUPPORTED (soon)
+// Linux    ARMv8    SUPPORTED
 // Windows  x86    UNSUPPORTED (probably never)
 // Windows  x64    UNSUPPORTED (probably never)
 // MacOS    x86    UNSUPPORTED (probably never)
@@ -45,8 +45,7 @@
 		#warning functionality will be disabled!
 	#elif defined(__aarch64__) && defined(__ARM_ARCH) && __ARM_ARCH == 8
 		#define FIXER_ARMV8     1
-		#warning zwo_fixer does not support the ARMv8 architecture (yet)!
-		#warning functionality will be disabled!
+		#define FIXER_SUPPORTED 1
 	#else
 		#error zwo_fixer does not support whatever CPU architecture this is!
 	#endif
@@ -172,6 +171,11 @@ static const OffsetMap_t g_Offsets_v1_16_3 = {
 	{ ".got.plt:libusb_cancel_transfer",   0x3DECB0 },
 	{ ".data:lin_XferLen",                 0x3E7580 },
 	{ ".bss:lin_XferCallbacked",           0x437D14 },
+#elif FIXER_ARMV8
+	{ ".text:callbackUSBTransferComplete", 0x1664A0 },
+	{ ".got.plt:libusb_cancel_transfer",   0x1D44C0 },
+	{ ".data:lin_XferLen",                 0x1DB7F0 },
+	{ ".bss:lin_XferCallbacked",           0x238B00 },
 #endif
 };
 
@@ -191,6 +195,11 @@ static const OffsetMap_t g_Offsets_v1_14_1119 = {
 	{ ".got.plt:libusb_cancel_transfer",   0x3993D0 },
 	{ ".data:lin_XferLen",                 0x3A1540 },
 	{ ".bss:lin_XferCallbacked",           0x3F1B74 },
+#elif FIXER_ARMV8
+	{ ".text:callbackUSBTransferComplete", 0x135760 },
+	{ ".got.plt:libusb_cancel_transfer",   0x193FB0 },
+	{ ".data:lin_XferLen",                 0x19ACF0 },
+	{ ".bss:lin_XferCallbacked",           0x1F7EF0 },
 #endif
 };
 
@@ -388,6 +397,11 @@ private:
 #if FIXER_X64
 	static constexpr size_t PLT_ENTRY_SIZE     = 16;
 	static constexpr size_t PLT_ENTRY_ALIGN    =  4;
+	static constexpr size_t GOT_PLT_SLOT_SIZE  =  8;
+	static constexpr size_t GOT_PLT_SLOT_ALIGN =  8;
+#elif FIXER_ARMV8
+	static constexpr size_t PLT_ENTRY_SIZE     = 16;
+	static constexpr size_t PLT_ENTRY_ALIGN    = 16;
 	static constexpr size_t GOT_PLT_SLOT_SIZE  =  8;
 	static constexpr size_t GOT_PLT_SLOT_ALIGN =  8;
 #endif
