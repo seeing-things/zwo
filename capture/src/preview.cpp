@@ -26,8 +26,8 @@ extern std::condition_variable to_preview_deque_cv;
 extern std::deque<Frame *> to_preview_deque;
 
 // trackbar positions
-int gain_trackbar_pos = camera::GAIN_MIN;
-int exposure_trackbar_pos = camera::EXPOSURE_MIN_US;
+int gain_trackbar_pos;
+int exposure_trackbar_pos;
 
 
 void make_histogram(cv::Mat &src)
@@ -120,6 +120,7 @@ void preview()
         nullptr
     );
 
+    gain_trackbar_pos = camera_gain;
     cv::createTrackbar(
         "gain",
         "Histogram",
@@ -129,6 +130,7 @@ void preview()
         nullptr
     );
 
+    exposure_trackbar_pos = camera_exposure_us;
     cv::createTrackbar(
         "exposure time",
         "Histogram",

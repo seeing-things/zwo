@@ -30,8 +30,8 @@ std::atomic_bool end_program = false;
 std::atomic_bool agc_enabled = false;
 
 // AGC outputs
-std::atomic_int camera_gain = camera::GAIN_MIN;
-std::atomic_int camera_exposure_us = camera::EXPOSURE_MIN_US;
+std::atomic_int camera_gain = camera::GAIN_MAX;
+std::atomic_int camera_exposure_us = camera::EXPOSURE_MAX_US;
 
 // std::deque is not thread safe
 std::mutex to_disk_deque_mutex;
