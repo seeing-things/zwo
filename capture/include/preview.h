@@ -1,3 +1,3 @@
 #pragma once
 
-void preview();
+void preview(bool color);

@@ -101,7 +101,7 @@ void agc_mode_trackbar_callback(int pos, void *userdata)
 }
 
 
-void preview()
+void preview(bool color)
 {
     constexpr char WINDOW_NAME[] = "Live Preview";
 
@@ -174,33 +174,40 @@ void preview()
             break;
         }
 
-        cv::Mat img_bayer_bg(2080, 3096, CV_8UC1, (void *)(frame->frame_buffer_));
+        cv::Mat img_raw(2080, 3096, CV_8UC1, (void *)(frame->frame_buffer_));
 
-        // Debayer
-        cv::Mat img_bgr;
-        cv::cvtColor(img_bayer_bg, img_bgr, cv::COLOR_BayerBG2BGR);
+        // Debayer if color camera
+        cv::Mat img_preview;
+        if (color)
+        {
+            cv::cvtColor(img_raw, img_preview, cv::COLOR_BayerBG2BGR);
+        }
+        else
+        {
+            img_preview = img_raw;
+        }
 
         // Add grey crosshairs
         cv::line(
-            img_bgr,
+            img_preview,
             cv::Point(camera::WIDTH / 2, 0),
             cv::Point(camera::WIDTH / 2, camera::HEIGHT - 1),
             cv::Scalar(50, 50, 50),
             1
         );
         cv::line(
-            img_bgr,
+            img_preview,
             cv::Point(0, camera::HEIGHT / 2),
             cv::Point(camera::WIDTH - 1, camera::HEIGHT / 2),
             cv::Scalar(50, 50, 50),
             1
         );
 
-        // Show color image with crosshairs in a window
-        cv::imshow(WINDOW_NAME, img_bgr);
+        // Show image with crosshairs in a window
+        cv::imshow(WINDOW_NAME, img_preview);
 
         // Display histogram
-        make_histogram(img_bayer_bg);
+        make_histogram(img_raw);
 
         if (agc_enabled)
         {

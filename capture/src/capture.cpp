@@ -140,10 +140,12 @@ int main(int argc, char *argv[])
     static std::thread write_to_disk_thread(
         write_to_disk,
         filename,
+        CamInfo.Name,
+        CamInfo.IsColorCam == ASI_TRUE,
         CamInfo.MaxWidth,
         CamInfo.MaxHeight
     );
-    static std::thread preview_thread(preview);
+    static std::thread preview_thread(preview, CamInfo.IsColorCam == ASI_TRUE);
     static std::thread agc_thread(agc);
 
     // These threads do not need real-time priority

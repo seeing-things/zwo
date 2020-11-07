@@ -23,6 +23,8 @@ extern std::deque<Frame *> to_disk_deque;
 // Writes frames of data to disk as quickly as possible. Run as a thread.
 void write_to_disk(
     const char *filename,
+    const char *camera_name,
+    bool color,
     int32_t image_width,
     int32_t image_height)
 {
@@ -36,7 +38,16 @@ void write_to_disk(
     if (disk_write_enabled)
     {
         ser_file.reset(
-            new SERFile(filename, image_width, image_height, BAYER_RGGB, 8, "", "ZWO ASI178MC", "")
+            new SERFile(
+                filename,
+                image_width,
+                image_height,
+                (color) ? BAYER_RGGB : MONO,
+                8,
+                "",
+                camera_name,
+                ""
+            )
         );
     }
     else
