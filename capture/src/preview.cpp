@@ -202,6 +202,12 @@ void preview()
         // Display histogram
         make_histogram(img_bayer_bg);
 
+        if (agc_enabled)
+        {
+            cv::setTrackbarPos("exposure time", "Histogram", camera_exposure_us);
+            cv::setTrackbarPos("gain", "Histogram", camera_gain);
+        }
+
         cv::waitKey(1);
 
         frame->decrRefCount();
