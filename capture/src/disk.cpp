@@ -19,6 +19,9 @@ extern std::mutex to_disk_deque_mutex;
 extern std::condition_variable to_disk_deque_cv;
 extern std::deque<Frame *> to_disk_deque;
 
+extern std::atomic_bool disk_file_exists;
+extern std::atomic_bool disk_write_enabled;
+
 
 // Writes frames of data to disk as quickly as possible. Run as a thread.
 void write_to_disk(
@@ -34,8 +37,7 @@ void write_to_disk(
     struct statvfs disk_stats;
     int32_t frame_count = 0;
 
-    bool disk_write_enabled = filename != nullptr;
-    if (disk_write_enabled)
+    if (filename != nullptr)
     {
         ser_file.reset(
             new SERFile(
@@ -68,7 +70,7 @@ void write_to_disk(
         to_disk_deque.pop_back();
         to_disk_deque_lock.unlock();
 
-        if (disk_write_enabled)
+        if (disk_write_enabled && disk_file_exists)
         {
             // Check free disk space (but not every single frame)
             if (frame_count % 100 == 0)

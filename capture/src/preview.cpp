@@ -24,6 +24,10 @@ extern std::atomic_bool agc_enabled;
 extern std::atomic_int camera_gain;
 extern std::atomic_int camera_exposure_us;
 
+// disk write state
+extern std::atomic_bool disk_file_exists;
+extern std::atomic_bool disk_write_enabled;
+
 extern std::mutex to_preview_deque_mutex;
 extern std::condition_variable to_preview_deque_cv;
 extern std::deque<Frame *> to_preview_deque;
@@ -178,7 +182,14 @@ void preview(bool color)
         duration<double> elapsed = now - then;
         double framerate = (double)NUM_FRAMERATE_FRAMES / elapsed.count();
         char window_title[512];
-        sprintf(window_title, "%s %.1f FPS", PREVIEW_WINDOW_NAME, framerate);
+        if (disk_file_exists)
+        {
+            sprintf(window_title, "%s %.1f FPS %s", PREVIEW_WINDOW_NAME, framerate, (disk_write_enabled) ? ("writing to disk") : ("disk write paused"));
+        }
+        else
+        {
+            sprintf(window_title, "%s %.1f FPS", PREVIEW_WINDOW_NAME, framerate);
+        }
         cv::setWindowTitle(PREVIEW_WINDOW_NAME, window_title);
 
         try
@@ -234,7 +245,20 @@ void preview(bool color)
             cv::setTrackbarPos("gain", HISTOGRAM_WINDOW_NAME, camera_gain);
         }
 
-        cv::waitKey(1);
+        char key = (char)cv::waitKey(1);
+
+        if (key == 's')
+        {
+            disk_write_enabled = !disk_write_enabled;
+            if (disk_write_enabled)
+            {
+                printf("Writing frames to disk if filename provided (press s to stop)\n");
+            }
+            else
+            {
+                printf("Not writing frames to disk (press s to start)\n");
+            }
+        }
 
         frame->decrRefCount();
     }

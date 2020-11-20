@@ -33,6 +33,10 @@ std::atomic_bool agc_enabled = false;
 std::atomic_int camera_gain = camera::GAIN_MAX;
 std::atomic_int camera_exposure_us = camera::EXPOSURE_MAX_US;
 
+// disk thread state
+std::atomic_bool disk_file_exists = false;
+std::atomic_bool disk_write_enabled = false;
+
 // std::deque is not thread safe
 std::mutex to_disk_deque_mutex;
 std::mutex to_preview_deque_mutex;
@@ -102,6 +106,7 @@ int main(int argc, char *argv[])
         else if (strncmp(argv[i], "file=", 5) == 0)
         {
             filename = argv[i] + 5;
+            disk_file_exists = true;
         }
         else if (strncmp(argv[i], "binning=", 8) == 0)
         {
@@ -122,7 +127,10 @@ int main(int argc, char *argv[])
      * Set real-time priority for the main thread. All threads created later, including by the ASI
      * library, will inherit this priority.
      */
-    set_thread_priority(pthread_self(), SCHED_RR, 10);
+    if (disk_file_exists)
+    {
+        set_thread_priority(pthread_self(), SCHED_RR, 10);
+    }
     set_thread_name(pthread_self(), "capture:main");
 
     bool zwo_fixer_ok = ZWOFixerInit();
