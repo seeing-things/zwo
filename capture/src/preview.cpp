@@ -32,6 +32,9 @@ extern std::deque<Frame *> to_preview_deque;
 int gain_trackbar_pos;
 int exposure_trackbar_pos;
 
+constexpr char PREVIEW_WINDOW_NAME[] = "Live Preview";
+constexpr char HISTOGRAM_WINDOW_NAME[] = "Histogram";
+
 
 void make_histogram(cv::Mat &src)
 {
@@ -66,7 +69,7 @@ void make_histogram(cv::Mat &src)
             -1
         );
     }
-    imshow("Histogram", histImg);
+    imshow(HISTOGRAM_WINDOW_NAME, histImg);
 }
 
 
@@ -106,17 +109,15 @@ void agc_mode_trackbar_callback(int pos, void *userdata)
 
 void preview(bool color)
 {
-    constexpr char WINDOW_NAME[] = "Live Preview";
-
     printf("preview thread id: %ld\n", syscall(SYS_gettid));
 
-    cv::namedWindow(WINDOW_NAME, cv::WINDOW_NORMAL);
-    cv::resizeWindow(WINDOW_NAME, 640, 480);
-    cv::namedWindow("Histogram", 1);
+    cv::namedWindow(PREVIEW_WINDOW_NAME, cv::WINDOW_NORMAL);
+    cv::resizeWindow(PREVIEW_WINDOW_NAME, 640, 480);
+    cv::namedWindow(HISTOGRAM_WINDOW_NAME, 1);
 
     cv::createTrackbar(
         "agc mode",
-        "Histogram",
+        HISTOGRAM_WINDOW_NAME,
         nullptr,
         1,
         agc_mode_trackbar_callback,
@@ -126,7 +127,7 @@ void preview(bool color)
     gain_trackbar_pos = camera_gain;
     cv::createTrackbar(
         "gain",
-        "Histogram",
+        HISTOGRAM_WINDOW_NAME,
         &gain_trackbar_pos,
         camera::GAIN_MAX,
         gain_trackbar_callback,
@@ -136,7 +137,7 @@ void preview(bool color)
     exposure_trackbar_pos = camera_exposure_us;
     cv::createTrackbar(
         "exposure time",
-        "Histogram",
+        HISTOGRAM_WINDOW_NAME,
         &exposure_trackbar_pos,
         camera::EXPOSURE_MAX_US,
         exposure_trackbar_callback,
@@ -177,13 +178,13 @@ void preview(bool color)
         duration<double> elapsed = now - then;
         double framerate = (double)NUM_FRAMERATE_FRAMES / elapsed.count();
         char window_title[512];
-        sprintf(window_title, "%s %.1f FPS", WINDOW_NAME, framerate);
-        cv::setWindowTitle(WINDOW_NAME, window_title);
+        sprintf(window_title, "%s %.1f FPS", PREVIEW_WINDOW_NAME, framerate);
+        cv::setWindowTitle(PREVIEW_WINDOW_NAME, window_title);
 
         try
         {
             // This throws an exception if the window is closed
-            cv::getWindowProperty(WINDOW_NAME, 0);
+            cv::getWindowProperty(PREVIEW_WINDOW_NAME, 0);
         }
         catch (cv::Exception &e)
         {
@@ -222,15 +223,15 @@ void preview(bool color)
         );
 
         // Show image with crosshairs in a window
-        cv::imshow(WINDOW_NAME, img_preview);
+        cv::imshow(PREVIEW_WINDOW_NAME, img_preview);
 
         // Display histogram
         make_histogram(img_raw);
 
         if (agc_enabled)
         {
-            cv::setTrackbarPos("exposure time", "Histogram", camera_exposure_us);
-            cv::setTrackbarPos("gain", "Histogram", camera_gain);
+            cv::setTrackbarPos("exposure time", HISTOGRAM_WINDOW_NAME, camera_exposure_us);
+            cv::setTrackbarPos("gain", HISTOGRAM_WINDOW_NAME, camera_gain);
         }
 
         cv::waitKey(1);
