@@ -12,6 +12,9 @@
 #include "camera.h"
 
 
+using namespace std::chrono;
+
+
 extern std::atomic_bool end_program;
 
 // AGC enable state
@@ -140,6 +143,10 @@ void preview(bool color)
         nullptr
     );
 
+    // deque of 10 timestamps for use in calculating frame rate
+    constexpr int NUM_FRAMERATE_FRAMES = 10;
+    std::deque<steady_clock::time_point> timestamps(NUM_FRAMERATE_FRAMES, steady_clock::now());
+
     while (!end_program)
     {
         // Get frame from deque
@@ -161,6 +168,17 @@ void preview(bool color)
         Frame *frame = to_preview_deque.back();
         to_preview_deque.pop_back();
         to_preview_deque_lock.unlock();
+
+        // Calculate framerate over last NUM_FRAMERATE_FRAMES
+        auto now = steady_clock::now();
+        timestamps.push_front(now);
+        auto then = timestamps.back();
+        timestamps.pop_back();
+        duration<double> elapsed = now - then;
+        double framerate = (double)NUM_FRAMERATE_FRAMES / elapsed.count();
+        char window_title[512];
+        sprintf(window_title, "%s %.1f FPS", WINDOW_NAME, framerate);
+        cv::setWindowTitle(WINDOW_NAME, window_title);
 
         try
         {
