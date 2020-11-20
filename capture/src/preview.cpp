@@ -39,6 +39,10 @@ int exposure_trackbar_pos;
 constexpr char PREVIEW_WINDOW_NAME[] = "Live Preview";
 constexpr char HISTOGRAM_WINDOW_NAME[] = "Histogram";
 
+// How often the histogram should be updated in seconds
+// Calculating the histogram is a non-trivial computational load
+constexpr double HISTOGRAM_UPDATE_PERIOD_S = 0.25;
+
 
 void make_histogram(cv::Mat &src)
 {
@@ -152,6 +156,8 @@ void preview(bool color)
     constexpr int NUM_FRAMERATE_FRAMES = 10;
     std::deque<steady_clock::time_point> timestamps(NUM_FRAMERATE_FRAMES, steady_clock::now());
 
+    auto last_histogram_update = steady_clock::now();
+
     while (!end_program)
     {
         // Get frame from deque
@@ -236,8 +242,15 @@ void preview(bool color)
         // Show image with crosshairs in a window
         cv::imshow(PREVIEW_WINDOW_NAME, img_preview);
 
+
         // Display histogram
-        make_histogram(img_raw);
+        now = steady_clock::now();
+        elapsed = now - last_histogram_update;
+        if (elapsed.count() >= HISTOGRAM_UPDATE_PERIOD_S)
+        {
+            make_histogram(img_raw);
+            last_histogram_update = now;
+        }
 
         if (agc_enabled)
         {
