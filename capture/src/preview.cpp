@@ -47,7 +47,7 @@ void make_histogram(cv::Mat &src)
     calcHist(&src, 1, channels, Mat(), hist, 1, histSize, ranges, true, false);
 
     // plot histogram on logarithmic y-axis
-    double maxVal = log10(camera::WIDTH * camera::HEIGHT);
+    double maxVal = log10(Frame::WIDTH * Frame::HEIGHT);
     int scale = 2;
     int height = 256;
     Mat histImg = Mat::zeros(height, 256*scale, CV_8UC3);
@@ -174,7 +174,7 @@ void preview(bool color)
             break;
         }
 
-        cv::Mat img_raw(2080, 3096, CV_8UC1, (void *)(frame->frame_buffer_));
+        cv::Mat img_raw(Frame::HEIGHT, Frame::WIDTH, CV_8UC1, (void *)(frame->frame_buffer_));
 
         // Debayer if color camera
         cv::Mat img_preview;
@@ -190,15 +190,15 @@ void preview(bool color)
         // Add grey crosshairs
         cv::line(
             img_preview,
-            cv::Point(camera::WIDTH / 2, 0),
-            cv::Point(camera::WIDTH / 2, camera::HEIGHT - 1),
+            cv::Point(Frame::WIDTH / 2, 0),
+            cv::Point(Frame::WIDTH / 2, Frame::HEIGHT - 1),
             cv::Scalar(50, 50, 50),
             1
         );
         cv::line(
             img_preview,
-            cv::Point(0, camera::HEIGHT / 2),
-            cv::Point(camera::WIDTH - 1, camera::HEIGHT / 2),
+            cv::Point(0, Frame::HEIGHT / 2),
+            cv::Point(Frame::WIDTH - 1, Frame::HEIGHT / 2),
             cv::Scalar(50, 50, 50),
             1
         );

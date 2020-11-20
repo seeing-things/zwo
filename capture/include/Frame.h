@@ -20,6 +20,8 @@ public:
 
     // Must be initialized before first object is constructed
     static size_t IMAGE_SIZE_BYTES;
+    static size_t WIDTH;
+    static size_t HEIGHT;
 
     // Raw image data from camera
     const uint8_t *frame_buffer_;

@@ -78,7 +78,7 @@ static const char *asi_error_str(ASI_ERROR_CODE code)
 }
 
 
-void camera::init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name)
+void camera::init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name, int binning)
 {
     ASI_ERROR_CODE asi_rtn;
 
@@ -147,9 +147,9 @@ void camera::init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name)
 
     asi_rtn = ASISetROIFormat(
         CamInfo.CameraID,
-        CamInfo.MaxWidth,
-        CamInfo.MaxHeight,
-        1,
+        CamInfo.MaxWidth / binning,
+        CamInfo.MaxHeight / binning,
+        binning,
         ASI_IMG_RAW8
     );
     if (asi_rtn != ASI_SUCCESS)

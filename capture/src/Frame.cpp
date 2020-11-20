@@ -8,6 +8,8 @@ extern std::mutex unused_deque_mutex;
 extern std::condition_variable unused_deque_cv;
 
 size_t Frame::IMAGE_SIZE_BYTES = 0;
+size_t Frame::WIDTH = 0;
+size_t Frame::HEIGHT = 0;
 
 Frame::Frame() :
     ref_count_(0)

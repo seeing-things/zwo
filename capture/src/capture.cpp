@@ -92,6 +92,7 @@ int main(int argc, char *argv[])
 
     const char *cam_name = nullptr;
     const char *filename = nullptr;
+    int binning = 1;
     for (int i = 1; i < argc; ++i)
     {
         if (strncmp(argv[i], "camera=", 7) == 0)
@@ -101,6 +102,10 @@ int main(int argc, char *argv[])
         else if (strncmp(argv[i], "file=", 5) == 0)
         {
             filename = argv[i] + 5;
+        }
+        else if (strncmp(argv[i], "binning=", 8) == 0)
+        {
+            binning = std::stoi(argv[i] + 8);
         }
         else
         {
@@ -124,10 +129,12 @@ int main(int argc, char *argv[])
     (void)zwo_fixer_ok; // currently unused
 
     ASI_CAMERA_INFO CamInfo;
-    camera::init_camera(CamInfo, cam_name);
+    camera::init_camera(CamInfo, cam_name, binning);
 
     // Create pool of frame buffers
-    Frame::IMAGE_SIZE_BYTES = CamInfo.MaxWidth * CamInfo.MaxHeight;
+    Frame::WIDTH = CamInfo.MaxWidth / binning;
+    Frame::HEIGHT = CamInfo.MaxHeight / binning;
+    Frame::IMAGE_SIZE_BYTES = Frame::WIDTH * Frame::HEIGHT;
     constexpr size_t FRAME_POOL_SIZE = 64;
     static std::deque<Frame> frames;
     for(size_t i = 0; i < FRAME_POOL_SIZE; i++)
@@ -142,8 +149,8 @@ int main(int argc, char *argv[])
         filename,
         CamInfo.Name,
         CamInfo.IsColorCam == ASI_TRUE,
-        CamInfo.MaxWidth,
-        CamInfo.MaxHeight
+        Frame::WIDTH,
+        Frame::HEIGHT
     );
     static std::thread preview_thread(preview, CamInfo.IsColorCam == ASI_TRUE);
     static std::thread agc_thread(agc);
