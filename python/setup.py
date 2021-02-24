@@ -54,7 +54,7 @@ setup(
         Extension(
             '_asi',
             ['asi.i'],
-            swig_opts=['-modern', '-I/usr/include'],
+            swig_opts=['-modern', '-I/usr/include', '-I/usr/include/x86_64-linux-gnu'],
             libraries=['ASICamera2'],
             include_dirs=get_numpy_include_dirs(),
         )
