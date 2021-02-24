@@ -111,6 +111,13 @@ static inline void Msg(Color color, const char *fmt, ...)
 using OffsetMap_t  = std::unordered_map<std::string, uintptr_t>;
 using VersionMap_t = std::map<std::string, const OffsetMap_t *>;
 
+static const OffsetMap_t g_Offsets_v1_16_3 = {
+	{ ".plt:libusb_cancel_transfer",       0x0516B0 },
+	{ ".text:callbackUSBTransferComplete", 0x187A20 },
+	{ ".data:lin_XferLen",                 0x3E7580 },
+	{ ".bss:lin_XferCallbacked",           0x437D14 },
+};
+
 static const OffsetMap_t g_Offsets_v1_14_1119 = {
 	{ ".plt:libusb_cancel_transfer",       0x046D30 },
 	{ ".text:callbackUSBTransferComplete", 0x1514D0 },
@@ -133,18 +140,27 @@ static const OffsetMap_t g_Offsets_v0_07_0503 = {
 };
 
 static const VersionMap_t g_KnownLibASIVersions = {
-	{ "1, 14, 1119", &g_Offsets_v1_14_1119 },
-	{ "1, 14, 0715", &g_Offsets_v1_14_0715 },
-	{ "1, 14, 0425", nullptr               },
-	{ "1, 14, 0227", nullptr               },
-	{ "1, 13, 0930", nullptr               },
-	{ "1, 13, 0821", nullptr               },
-	{ "0,  7, 0503", &g_Offsets_v0_07_0503 },
-	{ "0,  7, 0118", nullptr               },
-	{ "0,  6, 0921", nullptr               },
-	{ "0,  6, 0504", nullptr               },
-	{ "0,  6, 0414", nullptr               },
-	{ "0,  6, 0328", nullptr               },
+	{ "1, 16, 3, 0", &g_Offsets_v1_16_3    }, // 2020-12-31
+	{ "1, 16, 2, 0", nullptr               }, // 2020-??-??
+	{ "1, 16, 1, 0", nullptr               }, // 2020-??-??
+	{ "1, 16, 0",    nullptr               }, // 2020-??-??
+	{ "1, 15, 0915", nullptr               }, // 2020-09-18
+	{ "1, 15, 0819", nullptr               }, // 2020-08-19-ish
+	{ "1, 15, 0617", nullptr               }, // 2020-06-17
+	{ "1, 15, 0610", nullptr               }, // 2020-06-10
+	{ "1, 15, 0430", nullptr               }, // 2020-04-30
+	{ "1, 14, 1119", &g_Offsets_v1_14_1119 }, // 2019-11-19
+	{ "1, 14, 0715", &g_Offsets_v1_14_0715 }, // 2019-07-15
+	{ "1, 14, 0425", nullptr               }, // 2019-04-25-ish
+	{ "1, 14, 0227", nullptr               }, // 2019-02-27
+	{ "1, 13, 0930", nullptr               }, // 2018-09-30
+	{ "1, 13, 0821", nullptr               }, // 2018-08-21
+	{ "0,  7, 0503", &g_Offsets_v0_07_0503 }, // 2018-05-23 aka 1.13.0523
+	{ "0,  7, 0118", nullptr               }, // 2018-01-19 aka 1.13.1.12
+	{ "0,  6, 0921", nullptr               }, // 2017-09-21 aka 1.13.1.4
+	{ "0,  6, 0504", nullptr               }, // 2017-05-04 aka 1.13.?.?
+	{ "0,  6, 0414", nullptr               }, // 2017-04-14 aka 1.13.0.16
+	{ "0,  6, 0328", nullptr               }, // 2017-03-28 aka 1.13.0.13
 };
 
 static const dl_phdr_info *g_LibASIInfo    = nullptr;
