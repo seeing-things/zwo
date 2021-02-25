@@ -127,10 +127,7 @@ int main(int argc, char *argv[])
      * Set real-time priority for the main thread. All threads created later, including by the ASI
      * library, will inherit this priority.
      */
-    if (disk_file_exists)
-    {
-        set_thread_priority(pthread_self(), SCHED_RR, 10);
-    }
+    set_thread_priority(pthread_self(), SCHED_RR, 10);
     set_thread_name(pthread_self(), "capture:main");
 
     bool zwo_fixer_ok = ZWOFixerInit();
