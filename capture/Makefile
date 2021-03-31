@@ -1,7 +1,12 @@
 #VERSION = debug
  VERSION = release
 
-PLATFORM = x64
+#PLATFORM = x86
+ PLATFORM = x64
+#PLATFORM = armv5
+#PLATFORM = armv6
+#PLATFORM = armv7
+#PLATFORM = armv8
 
 
 CC = g++
@@ -22,7 +27,7 @@ ASI_INCPATH  = $(ASI_BASEPATH)/include
 ASI_LIBPATH  = $(ASI_BASEPATH)/lib/$(PLATFORM)
 
 ASI_CFLAGS  = -I$(ASI_INCPATH)
-ASI_LDFLAGS = -L$(ASI_LIBPATH) -l:libASICamera2.so.$(ASI_VERSION)
+ASI_LDFLAGS = -L$(ASI_LIBPATH) -lrt -l:libASICamera2.so.$(ASI_VERSION)
 
 
 ZWOFIXER_PATH=../zwo_fixer
@@ -41,9 +46,31 @@ else
 	CFLAGS += -O3
 endif
 
+ifeq ($(PLATFORM), x86)
+	CFLAGS += -m32
+endif
+
 ifeq ($(PLATFORM), x64)
 	CFLAGS += -m64
-	CFLAGS += -lrt
+endif
+
+ifeq ($(PLATFORM), armv5)
+#	CC      = arm-none-linux-gnueabi-g++
+	CFLAGS += -march=armv5
+endif
+
+ifeq ($(PLATFORM), armv6)
+#	CC      = arm-linux-gnueabi-g++
+	CFLAGS += -march=armv6
+endif
+
+ifeq ($(PLATFORM), armv7)
+#	CC      = arm-linux-gnueabihf-g++
+	CFLAGS += -march=armv7 -mcpu=cortex-m3 -mthumb
+endif
+
+ifeq ($(PLATFORM), armv8)
+#	CC = aarch64-linux-gnu-g++
 endif
 
 
