@@ -61,7 +61,7 @@ The following libraries are required for building the `capture` program (Debian 
 - libopencv-imgproc (libopencv-imgproc-dev)
 - libzwo_fixer -- built from the source contained in this repository
 
-Once the dependencies are installed, simply run `make` in the `capture/` subdirectory. This should generate a binary `capture/bin/capture`.
+Once the dependencies are installed, run `make PLATFORM=x64` in the `capture/` subdirectory. This should generate a binary `capture/bin/capture`. (To build for 32-bit x86, use `PLATFORM=x86`; for ARM, set `PLATFORM` to `armv5`/`armv6`/`armv7`/`armv8` as appropriate. This is an ugly Makefile detail that will hopefully be removed at some point.)
 
 ## Enabling Realtime Priorities for Non-Root Users
 
