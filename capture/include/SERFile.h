@@ -1,5 +1,6 @@
 #pragma once
 #include <cstring>
+#include <tuple>
 #include <vector>
 #include "Frame.h"
 
@@ -28,7 +29,7 @@ enum SERColorID_t : int32_t
 };
 
 
-struct __attribute__ ((packed)) SERHeader_t
+struct [[gnu::packed]] SERHeader_t
 {
     // 1. This is a historical artifact of the SER format.
     const char FileID[14] = {'L', 'U', 'C', 'A', 'M', '-', 'R', 'E', 'C', 'O', 'R', 'D', 'E', 'R'};
@@ -112,5 +113,6 @@ private:
     bool add_trailer_;
     std::vector<int64_t> frame_timestamps_;
 
-    void makeTimestamps(int64_t *utc, int64_t *local);
+    using TimestampPair_t = std::tuple<int64_t, int64_t>; // utc, local
+    TimestampPair_t makeTimestamps();
 };
