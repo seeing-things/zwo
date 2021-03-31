@@ -74,7 +74,9 @@ SERFile::SERFile(
     strlcpy(header_->Observer, observer, 40);
     strlcpy(header_->Instrument, instrument, 40);
     strlcpy(header_->Telescope, telescope, 40);
-    makeTimestamps(&(header_->DateTime_UTC), &(header_->DateTime));
+    auto [utc, local] = makeTimestamps();
+    header_->DateTime_UTC = utc;
+    header_->DateTime = local;
 }
 
 SERFile::~SERFile()
@@ -123,7 +125,7 @@ void SERFile::addFrame(Frame &frame)
     if (add_trailer_)
     {
         int64_t utc_timestamp;
-        makeTimestamps(&utc_timestamp, nullptr);
+        std::tie(utc_timestamp, std::ignore) = makeTimestamps();
         frame_timestamps_.push_back(utc_timestamp);
     }
 
@@ -156,7 +158,7 @@ int64_t SERFile::utcOffset()
     return 3600 * hours + 60 * minutes;
 }
 
-void SERFile::makeTimestamps(int64_t *utc, int64_t *local)
+SERFile::TimestampPair_t SERFile::makeTimestamps()
 {
     using namespace std::chrono;
 
@@ -172,13 +174,7 @@ void SERFile::makeTimestamps(int64_t *utc, int64_t *local)
     int64_t ns_since_epoch = duration_cast<nanoseconds>(now.time_since_epoch()).count();
 
     int64_t utc_tick = (ns_since_epoch / 100) + VB_DATE_TICKS_TO_UNIX_EPOCH;
-    if (utc != nullptr)
-    {
-        *utc = utc_tick;
-    }
+    int64_t local_tick = utc_tick + UTC_OFFSET_S * VB_DATE_TICKS_PER_SEC;
 
-    if (local != nullptr)
-    {
-        *local = utc_tick + UTC_OFFSET_S * VB_DATE_TICKS_PER_SEC;
-    }
+    return TimestampPair_t(utc_tick, local_tick);
 }
