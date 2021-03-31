@@ -14,9 +14,10 @@ CC = g++
 OPENCV = -lopencv_core -lopencv_highgui -lopencv_imgproc#$(shell pkg-config --cflags opencv) $(shell pkg-config --libs opencv) -I/usr/include/opencv2
 USB = -I../libusb/include  -L../libusb/$(PLATFORM) -lusb-1.0
 
-
 # "hack" for compat with Arch Linux's opencv include path, since we aren't using pkg-config in here for some idiotic reason
 OPENCV += -I/usr/include/opencv4
+
+LIBS = -lrt -lbsd
 
 
 ASI_VERSION = 1.16.3
@@ -27,7 +28,7 @@ ASI_INCPATH  = $(ASI_BASEPATH)/include
 ASI_LIBPATH  = $(ASI_BASEPATH)/lib/$(PLATFORM)
 
 ASI_CFLAGS  = -I$(ASI_INCPATH)
-ASI_LDFLAGS = -L$(ASI_LIBPATH) -lrt -l:libASICamera2.so.$(ASI_VERSION)
+ASI_LDFLAGS = -L$(ASI_LIBPATH) -l:libASICamera2.so.$(ASI_VERSION)
 
 
 ZWOFIXER_PATH=../zwo_fixer
@@ -79,11 +80,11 @@ all: bin/capture bin/write_benchmark
 bin/capture: src/Frame.cpp src/SERFile.cpp src/agc.cpp src/disk.cpp src/preview.cpp src/camera.cpp src/capture.cpp
 	make -C $(ZWOFIXER_PATH) all
 	mkdir -p bin
-	$(CC) $^ -o $@ $(CFLAGS) $(OPENCV) $(ASI_CFLAGS) $(ASI_LDFLAGS) $(ZWOFIXER_CFLAGS) $(ZWOFIXER_LDFLAGS)
+	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCV) $(ASI_CFLAGS) $(ASI_LDFLAGS) $(ZWOFIXER_CFLAGS) $(ZWOFIXER_LDFLAGS)
 
 bin/write_benchmark: write_benchmark.cpp
 	mkdir -p bin
-	$(CC) $< -o $@ $(CFLAGS)
+	$(CC) $< -o $@ $(CFLAGS) $(LIBS)
 
 clean:
 	make -C $(ZWOFIXER_PATH) clean

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstring>
 #include <vector>
 #include "Frame.h"
 
@@ -54,19 +55,26 @@ struct __attribute__ ((packed)) SERHeader_t
     int32_t FrameCount = 0;
 
     // 9. Name of observer. 40 ASCII characters {32-126 dec.}, fill unused characters with 0 dec.
-    char Observer[40] = "";
+    char Observer[40];
 
     // 10. Name of used camera. 40 ASCII characters {32-126 dec.}, fill unused characters with 0 dec.
-    char Instrument[40] = "";
+    char Instrument[40];
 
     // 11. Name of used telescope. 40 ASCII characters {32-126 dec.}, fill unused characters with 0 dec.
-    char Telescope[40] = "";
+    char Telescope[40];
 
     // 12. Start time of image stream (local time). Must be >= 0.
     int64_t DateTime = 0;
 
     // 13. Start time of image stream in UTC.
     int64_t DateTime_UTC = 0;
+
+	SERHeader_t() noexcept
+	{
+		memset(Observer,   0, sizeof(Observer));
+		memset(Instrument, 0, sizeof(Instrument));
+		memset(Telescope,  0, sizeof(Telescope));
+	}
 };
 
 

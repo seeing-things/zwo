@@ -55,6 +55,7 @@ To compile this software, a C++ compiler is required. On Debian-based Linux dist
 The following libraries are required for building the `capture` program (Debian package names in parentheses):
 - librt (libc6-dev)
 - libpthread (libc6-dev)
+- libbsd (libbsd-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
 - libopencv-core (libopencv-core-dev)
 - libopencv-highgui (libopencv-highgui-dev)

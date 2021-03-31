@@ -1,5 +1,5 @@
 #include "SERFile.h"
-#include <cstring>
+#include <bsd/string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -71,9 +71,9 @@ SERFile::SERFile(
     header_->ImageHeight = height;
     header_->ColorID = color_id;
     header_->PixelDepthPerPlane = bit_depth;
-    strncpy(header_->Observer, observer, 40);
-    strncpy(header_->Instrument, instrument, 40);
-    strncpy(header_->Telescope, telescope, 40);
+    strlcpy(header_->Observer, observer, 40);
+    strlcpy(header_->Instrument, instrument, 40);
+    strlcpy(header_->Telescope, telescope, 40);
     makeTimestamps(&(header_->DateTime_UTC), &(header_->DateTime));
 }
 
