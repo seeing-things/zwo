@@ -220,7 +220,9 @@ void preview(bool color)
         }
         else
         {
-            img_preview = img_raw;
+            // Must make a copy so that crosshairs added later do not modify the original frame.
+            // Modifications to the original frame could end up being written to disk.
+            img_preview = img_raw.clone();
         }
 
         // Add grey crosshairs
