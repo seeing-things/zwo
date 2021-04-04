@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <spdlog/spdlog.h>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include "Frame.h"
@@ -157,6 +158,8 @@ void preview(bool color)
     std::deque<steady_clock::time_point> timestamps(NUM_FRAMERATE_FRAMES, steady_clock::now());
 
     auto last_histogram_update = steady_clock::now();
+    bool preview_window_open = true;
+    bool histogram_window_open = true;
 
     while (!end_program)
     {
@@ -180,6 +183,15 @@ void preview(bool color)
         to_preview_deque.pop_back();
         to_preview_deque_lock.unlock();
 
+        if (preview_window_open == false && histogram_window_open == false)
+        {
+            // both windows were closed by the user; no need for this thread anymore
+            frame->decrRefCount();
+            break;
+        }
+
+        cv::Mat img_raw(Frame::HEIGHT, Frame::WIDTH, CV_8UC1, (void *)(frame->frame_buffer_));
+
         // Calculate framerate over last NUM_FRAMERATE_FRAMES
         auto now = steady_clock::now();
         timestamps.push_front(now);
@@ -187,71 +199,93 @@ void preview(bool color)
         timestamps.pop_back();
         duration<double> elapsed = now - then;
         double framerate = (double)(NUM_FRAMERATE_FRAMES - 1) / elapsed.count();
-        char window_title[512];
-        if (disk_file_exists)
-        {
-            sprintf(window_title, "%s %.1f FPS %s", PREVIEW_WINDOW_NAME, framerate, (disk_write_enabled) ? ("writing to disk") : ("disk write paused"));
-        }
-        else
-        {
-            sprintf(window_title, "%s %.1f FPS", PREVIEW_WINDOW_NAME, framerate);
-        }
-        cv::setWindowTitle(PREVIEW_WINDOW_NAME, window_title);
 
-        try
+        // Check if the preview window is actually still open
+        if (preview_window_open)
         {
-            // This throws an exception if the window is closed
-            cv::getWindowProperty(PREVIEW_WINDOW_NAME, 0);
-        }
-        catch (cv::Exception &e)
-        {
-            // window was closed by user
-            frame->decrRefCount();
-            break;
+            try
+            {
+                // Should throw cv::Exception if the window was closed
+                cv::getWindowImageRect(PREVIEW_WINDOW_NAME);
+            }
+            catch (cv::Exception &e)
+            {
+                spdlog::warn("Preview window closed.");
+                preview_window_open = false;
+            }
         }
 
-        cv::Mat img_raw(Frame::HEIGHT, Frame::WIDTH, CV_8UC1, (void *)(frame->frame_buffer_));
-
-        // Debayer if color camera
-        cv::Mat img_preview;
-        if (color)
+        if (preview_window_open)
         {
-            cv::cvtColor(img_raw, img_preview, cv::COLOR_BayerBG2BGR);
+            char window_title[512];
+            if (disk_file_exists)
+            {
+                sprintf(window_title, "%s %.1f FPS %s", PREVIEW_WINDOW_NAME, framerate, (disk_write_enabled) ? ("writing to disk") : ("disk write paused"));
+            }
+            else
+            {
+                sprintf(window_title, "%s %.1f FPS", PREVIEW_WINDOW_NAME, framerate);
+            }
+            cv::setWindowTitle(PREVIEW_WINDOW_NAME, window_title);
+
+            // Debayer if color camera
+            cv::Mat img_preview;
+            if (color)
+            {
+                cv::cvtColor(img_raw, img_preview, cv::COLOR_BayerBG2BGR);
+            }
+            else
+            {
+                // Must make a copy so that crosshairs added later do not modify the original frame.
+                // Modifications to the original frame could end up being written to disk.
+                img_preview = img_raw.clone();
+            }
+
+            // Add grey crosshairs
+            cv::line(
+                img_preview,
+                cv::Point(Frame::WIDTH / 2, 0),
+                cv::Point(Frame::WIDTH / 2, Frame::HEIGHT - 1),
+                cv::Scalar(50, 50, 50),
+                1
+            );
+            cv::line(
+                img_preview,
+                cv::Point(0, Frame::HEIGHT / 2),
+                cv::Point(Frame::WIDTH - 1, Frame::HEIGHT / 2),
+                cv::Scalar(50, 50, 50),
+                1
+            );
+
+            // Show image with crosshairs in a window
+            cv::imshow(PREVIEW_WINDOW_NAME, img_preview);
         }
-        else
+
+        // Check if the histogram window is actually still open
+        if (histogram_window_open)
         {
-            // Must make a copy so that crosshairs added later do not modify the original frame.
-            // Modifications to the original frame could end up being written to disk.
-            img_preview = img_raw.clone();
+            try
+            {
+                // Should throw cv::Exception if the window was closed
+                cv::getWindowImageRect(HISTOGRAM_WINDOW_NAME);
+            }
+            catch (cv::Exception &e)
+            {
+                spdlog::warn("Histogram window closed.");
+                histogram_window_open = false;
+            }
         }
 
-        // Add grey crosshairs
-        cv::line(
-            img_preview,
-            cv::Point(Frame::WIDTH / 2, 0),
-            cv::Point(Frame::WIDTH / 2, Frame::HEIGHT - 1),
-            cv::Scalar(50, 50, 50),
-            1
-        );
-        cv::line(
-            img_preview,
-            cv::Point(0, Frame::HEIGHT / 2),
-            cv::Point(Frame::WIDTH - 1, Frame::HEIGHT / 2),
-            cv::Scalar(50, 50, 50),
-            1
-        );
-
-        // Show image with crosshairs in a window
-        cv::imshow(PREVIEW_WINDOW_NAME, img_preview);
-
-
-        // Display histogram
-        now = steady_clock::now();
-        elapsed = now - last_histogram_update;
-        if (elapsed.count() >= HISTOGRAM_UPDATE_PERIOD_S)
+        if (histogram_window_open)
         {
-            make_histogram(img_raw);
-            last_histogram_update = now;
+            // Display histogram
+            now = steady_clock::now();
+            elapsed = now - last_histogram_update;
+            if (elapsed.count() >= HISTOGRAM_UPDATE_PERIOD_S)
+            {
+                make_histogram(img_raw);
+                last_histogram_update = now;
+            }
         }
 
         if (agc_enabled)
