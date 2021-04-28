@@ -256,7 +256,7 @@ void preview(bool color)
 
         if (agc_enabled)
         {
-            cv::setTrackbarPos("exposure time", HISTOGRAM_WINDOW_NAME, camera_exposure_us);
+            // cv::setTrackbarPos("exposure time", HISTOGRAM_WINDOW_NAME, camera_exposure_us);
             cv::setTrackbarPos("gain", HISTOGRAM_WINDOW_NAME, camera_gain);
         }
 

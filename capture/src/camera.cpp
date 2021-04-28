@@ -162,7 +162,7 @@ void camera::init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name, int bin
      * results in stable performance is 94 for the ASI178MC camera and the PC hardware / OS in use.
      * Higher values result in excessive dropped frames.
      */
-    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_BANDWIDTHOVERLOAD, 94, ASI_FALSE);
+    asi_rtn = ASISetControlValue(CamInfo.CameraID, ASI_BANDWIDTHOVERLOAD, 93, ASI_FALSE);
     if (asi_rtn != ASI_SUCCESS)
     {
         errx(1, "SetControlValue error for ASI_BANDWIDTHOVERLOAD: %s", asi_error_str(asi_rtn));
@@ -295,13 +295,13 @@ void camera::run_camera(ASI_CAMERA_INFO &CamInfo)
         {
             int num_dropped_frames;
             ASIGetDroppedFrames(CamInfo.CameraID, &num_dropped_frames);
-            printf("Frame count: %06d, Dropped frames: %06d\n", frame_count, num_dropped_frames);
-            printf(
-                "To-disk queue: %zu frames, to-AGC queue: %zu frames, pool: %zu free frames.\n",
-                to_disk_deque.size(),
-                to_agc_deque.size(),
-                unused_deque.size()
-            );
+            // printf("Frame count: %06d, Dropped frames: %06d\n", frame_count, num_dropped_frames);
+            // printf(
+            //     "To-disk queue: %zu frames, to-AGC queue: %zu frames, pool: %zu free frames.\n",
+            //     to_disk_deque.size(),
+            //     to_agc_deque.size(),
+            //     unused_deque.size()
+            // );
             time1 = GetTickCount();
         }
     }

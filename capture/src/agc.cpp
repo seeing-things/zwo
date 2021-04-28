@@ -39,7 +39,8 @@ void agc()
      * The AGC directly servos this variable which has range [0.0, 1.0]. The camera gain and
      * exposure time are both functions of this value.
      */
-    static double agc_value = 0.0;
+    // TODO: no longer matches docstring
+    static int agc_value = GAIN_MAX;
 
     printf("gain thread id: %ld\n", syscall(SYS_gettid));
 
@@ -73,57 +74,63 @@ void agc()
         }
         frame->decrRefCount();
 
-        // Calculate Nth percentile pixel value
-        constexpr float percentile = 1.0;
-        uint32_t integral_threshold = (uint32_t)((1.0 - percentile) * Frame::IMAGE_SIZE_BYTES);
-        uint8_t upper_tail_val = 255;
-        uint32_t integral = hist[upper_tail_val];;
-        while (integral <= integral_threshold)
+        // Calculate Nth percentile pixel value (inclusive). This algorithm starts with the
+        // integral over the entire histogram, which contains all pixels in the image, and works
+        // backwards one histogram bin at a time until the integral from 0 to some pixel value
+        // (inclusive) contains `percentile` % of the total number of pixels.
+        constexpr float threshold_fraction = 0.99;
+        uint32_t integral_threshold = (uint32_t)(threshold_fraction * Frame::IMAGE_SIZE_BYTES);
+        uint8_t percentile_value = 255;
+        uint32_t integral = Frame::IMAGE_SIZE_BYTES;
+        while (integral > integral_threshold)
         {
-            upper_tail_val--;
-            integral += hist[upper_tail_val];
+            integral -= hist[percentile_value];
+            percentile_value--;
         }
+
+        printf("%.1f-th percentile value: %d, ", 100*threshold_fraction, percentile_value);
 
         // Adjust AGC
-        if (upper_tail_val >= 255)
+        int g = camera_gain;
+        printf("gain: %03d", g);
+        if (percentile_value >= 250 && camera_gain > GAIN_MIN)
         {
-            agc_value -= 0.01;
+            camera_gain -= 1;
+            printf(" -");
         }
-        else if (upper_tail_val < 230)
+        else if (percentile_value < 200 && camera_gain < GAIN_MAX)
         {
-            agc_value += 0.01;
+            camera_gain += 1;
+            printf(" +");
         }
-        agc_value = std::clamp(agc_value, 0.0, 1.0);
+        // agc_value = std::clamp(agc_value, GAIN_MIN, GAIN_MAX);
 
-        printf("AGC value: %.3f, upper tail value: %03d", agc_value, upper_tail_val);
+        // printf("AGC value: %.3f, ", agc_value);
 
         // derive new camera gain
-        int new_gain = std::clamp(
-            (int)(4.0 * GAIN_MAX * agc_value - (3.0 * GAIN_MAX)),
-            GAIN_MIN,
-            GAIN_MAX
-        );
-        printf(", gain: %03d", new_gain);
-        if (new_gain != camera_gain)
-        {
-            printf(" %c", (new_gain > camera_gain ? '+' : '-'));
-            camera_gain = new_gain;
-        }
-
-        // derive new camera exposure time
-        int new_exposure_us = std::clamp(
-            (int)(4.0 / 3.0 * EXPOSURE_MAX_US * agc_value),
-            EXPOSURE_MIN_US,
-            EXPOSURE_MAX_US
-        );
-        printf(", exposure: %05.2f ms", (float)new_exposure_us / 1.0e3);
-        if (new_exposure_us != camera_exposure_us)
-        {
-            printf(" %c", (new_exposure_us > camera_exposure_us ? '+' : '-'));
-            camera_exposure_us = new_exposure_us;
-        }
-
+        // int new_gain = agc_value;
+        // printf("gain: %03d", new_gain);
+        // if (new_gain != camera_gain)
+        // {
+        //     printf(" %c", (new_gain > camera_gain ? '+' : '-'));
+        //     camera_gain = new_gain;
+        // }
         printf("\n");
+
+        // // derive new camera exposure time
+        // int new_exposure_us = std::clamp(
+        //     (int)(4.0 / 3.0 * EXPOSURE_MAX_US * agc_value),
+        //     EXPOSURE_MIN_US,
+        //     EXPOSURE_MAX_US
+        // );
+        // printf(", exposure: %05.2f ms", (float)new_exposure_us / 1.0e3);
+        // if (new_exposure_us != camera_exposure_us)
+        // {
+        //     printf(" %c", (new_exposure_us > camera_exposure_us ? '+' : '-'));
+        //     camera_exposure_us = new_exposure_us;
+        // }
+
+        // printf("\n");
     }
 
     printf("AGC thread ending.\n");
