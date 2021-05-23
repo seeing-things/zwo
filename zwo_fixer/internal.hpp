@@ -164,6 +164,27 @@ static inline void Msg(Color color, const char *fmt, ...)
 using OffsetMap_t  = std::unordered_map<std::string, uintptr_t>;
 using VersionMap_t = std::map<std::string, const OffsetMap_t *>;
 
+static const OffsetMap_t g_Offsets_v1_18 = {
+#if FIXER_X64
+	{ ".text:callbackUSBTransferComplete", 0x1A5C20 },
+	{ ".got.plt:libusb_cancel_transfer",   0x434A90 },
+	{ ".data:lin_XferLen",                 0x43DD40 },
+	{ ".bss:lin_XferCallbacked",           0x515554 },
+#elif FIXER_ARMV7
+	{ ".text:callbackUSBTransferComplete", 0x124948 },
+	{ ".got.plt:libusb_cancel_transfer",   0x176FD8 }, // actually in .got (there is no .got.plt)
+	{ ".data:lin_XferLen",                 0x17CD90 },
+	{ ".bss:lin_XferCallbacked",           0x21497C },
+#elif FIXER_ARMV8
+	{ ".text:callbackUSBTransferComplete", 0x183C00 },
+	{ ".got.plt:libusb_cancel_transfer",   0x222190 },
+	{ ".data:lin_XferLen",                 0x229E20 },
+	{ ".bss:lin_XferCallbacked",           0x332198 },
+#endif
+};
+
+static const OffsetMap_t g_Offsets_v1_17;
+
 static const OffsetMap_t g_Offsets_v1_16_3 = {
 #if FIXER_X64
 	{ ".text:callbackUSBTransferComplete", 0x187A20 },
@@ -242,10 +263,12 @@ static const OffsetMap_t g_Offsets_v0_06_0414;
 static const OffsetMap_t g_Offsets_v0_06_0328;
 
 static const VersionMap_t g_KnownLibASIVersions = {
+	{ "1, 18",       &g_Offsets_v1_18      }, // 2021-04-23
+	{ "1, 17",       &g_Offsets_v1_17      }, // 2021-03-17
 	{ "1, 16, 3, 0", &g_Offsets_v1_16_3    }, // 2020-12-31
-	{ "1, 16, 2, 0", &g_Offsets_v1_16_2    }, // 2020-??-??
-	{ "1, 16, 1, 0", &g_Offsets_v1_16_1    }, // 2020-??-??
-	{ "1, 16, 0",    &g_Offsets_v1_16_0    }, // 2020-??-??
+	{ "1, 16, 2, 0", &g_Offsets_v1_16_2    }, // 2020-12-23
+	{ "1, 16, 1, 0", &g_Offsets_v1_16_1    }, // 2020-12-18
+	{ "1, 16, 0",    &g_Offsets_v1_16_0    }, // 2020-11-19
 	{ "1, 15, 0915", &g_Offsets_v1_15_0915 }, // 2020-09-18
 	{ "1, 15, 0819", &g_Offsets_v1_15_0819 }, // 2020-08-19-ish
 	{ "1, 15, 0617", &g_Offsets_v1_15_0617 }, // 2020-06-17
