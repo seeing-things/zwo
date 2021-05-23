@@ -20,7 +20,7 @@ OPENCV += -I/usr/include/opencv4
 LIBS = -lrt -lbsd
 
 
-ASI_VERSION = 1.16.3
+ASI_VERSION = 1.18
 
 ASI_BASEPATH = ../$(ASI_VERSION)/linux_sdk
 
