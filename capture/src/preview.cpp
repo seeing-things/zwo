@@ -144,7 +144,7 @@ void preview(bool color)
 
     exposure_trackbar_pos = camera_exposure_us;
     cv::createTrackbar(
-        "exposure time",
+        "exposure time [us]",
         HISTOGRAM_WINDOW_NAME,
         &exposure_trackbar_pos,
         camera::EXPOSURE_MAX_US,
