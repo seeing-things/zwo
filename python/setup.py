@@ -67,7 +67,7 @@ setup(
         Extension(
             '_asi',
             ['asi.i'],
-            swig_opts=['-modern', '-I/usr/include'],
+            swig_opts=['-I/usr/include'],
             libraries=['ASICamera2'],
         )
     ],

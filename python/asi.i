@@ -151,7 +151,7 @@ def ASICheck(return_values):
 /*
  * Otherwise it's impossible to access the elements of these arrays from Python
  */
-%addmethods ASI_CAMERA_INFO
+%extend _ASI_CAMERA_INFO
 {
     int get_supported_bins(int index)
     {
