@@ -1,16 +1,29 @@
 from setuptools import setup, Extension
 from setuptools.command.build_py import build_py as _build_py
+from setuptools.command.build_ext import build_ext as _build_ext
 
-from numpy.distutils.misc_util import get_numpy_include_dirs
 
 # Have to define a new class that is used for the build_py step because build_py expects to find
-# asi.py, but that isn't generated until build_ext is run. Normally build_ext is run after 
+# asi.py, but that isn't generated until build_ext is run. Normally build_ext is run after
 # build_py. When this class is used for build_py, build_ext is run first. See also the cmdclass
 # option added to the setup() function further down in this file.
 class build_py(_build_py):
     def run(self):
         self.run_command("build_ext")
         return super().run()
+
+
+class build_ext(_build_ext):
+    def run(self):
+        # Normally include_dirs would be passed as an argument to the Extension object constructor
+        # but we need to import numpy in order to find the include dirs and we don't know if numpy
+        # is installed before setup() is called. Once we get to this point numpy should be
+        # installed because it is listed in setup_requires for setup().
+        from numpy.distutils.misc_util import get_numpy_include_dirs
+        self.extensions[0].include_dirs=get_numpy_include_dirs()
+
+        return super().run()
+
 
 setup(
     name='asi',
@@ -56,13 +69,12 @@ setup(
             ['asi.i'],
             swig_opts=['-modern', '-I/usr/include'],
             libraries=['ASICamera2'],
-            include_dirs=get_numpy_include_dirs(),
         )
     ],
 
     py_modules=['asi'],
 
-    cmdclass={'build_py': build_py},
+    cmdclass={'build_py': build_py, 'build_ext': build_ext},
 
     test_suite='asi_test',
 )
