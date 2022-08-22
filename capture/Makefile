@@ -77,10 +77,10 @@ endif
 
 all: bin/capture bin/write_benchmark
 
-bin/capture: src/Frame.cpp src/SERFile.cpp src/agc.cpp src/disk.cpp src/preview.cpp src/camera.cpp src/capture.cpp
+bin/capture: include/*.h src/*.cpp $(ZWOFIXER_PATH)/*.hpp $(ZWOFIXER_PATH)/*.cpp
 	make -C $(ZWOFIXER_PATH) all
 	mkdir -p bin
-	$(CC) $^ -o $@ $(CFLAGS) $(LIBS) $(OPENCV) $(ASI_CFLAGS) $(ASI_LDFLAGS) $(ZWOFIXER_CFLAGS) $(ZWOFIXER_LDFLAGS)
+	$(CC) src/*.cpp -o $@ $(CFLAGS) $(LIBS) $(OPENCV) $(ASI_CFLAGS) $(ASI_LDFLAGS) $(ZWOFIXER_CFLAGS) $(ZWOFIXER_LDFLAGS)
 
 bin/write_benchmark: write_benchmark.cpp
 	mkdir -p bin
@@ -92,4 +92,3 @@ clean:
 
 #pkg-config libusb-1.0 --cflags --libs
 #pkg-config opencv --cflags --libs
-
