@@ -244,7 +244,7 @@ void camera::run_camera(ASI_CAMERA_INFO &CamInfo)
             CamInfo.CameraID,
             const_cast<uint8_t *>(frame->frame_buffer_),
             Frame::IMAGE_SIZE_BYTES,
-            200
+            (2 * camera_exposure_us + 500'000) / 1000  // timeout in ms
         );
         if (asi_rtn == ASI_SUCCESS)
         {

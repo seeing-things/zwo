@@ -94,12 +94,12 @@ void gain_trackbar_callback(int pos, void *userdata)
 
 void exposure_trackbar_callback(int pos, void *userdata)
 {
-    exposure_trackbar_pos = std::clamp(pos, camera::EXPOSURE_MIN_US, camera::EXPOSURE_MAX_US);
+    exposure_trackbar_pos = std::clamp(pos, 1, camera::EXPOSURE_MAX_US / 1000);
 
     // Exposure time under manual control
     if (!agc_enabled)
     {
-        camera_exposure_us = exposure_trackbar_pos;
+        camera_exposure_us = 1000 * exposure_trackbar_pos;
     }
 }
 
@@ -142,12 +142,12 @@ void preview(bool color)
         nullptr
     );
 
-    exposure_trackbar_pos = camera_exposure_us;
+    exposure_trackbar_pos = camera_exposure_us / 1000;
     cv::createTrackbar(
-        "exposure time [us]",
+        "exposure time [ms]",
         HISTOGRAM_WINDOW_NAME,
         &exposure_trackbar_pos,
-        camera::EXPOSURE_MAX_US,
+        camera::EXPOSURE_MAX_US / 1000,
         exposure_trackbar_callback,
         nullptr
     );
@@ -158,14 +158,18 @@ void preview(bool color)
 
     auto last_histogram_update = steady_clock::now();
 
+    double framerate;
+    Frame *frame = nullptr;
     while (!end_program)
     {
         // Get frame from deque
         std::unique_lock<std::mutex> to_preview_deque_lock(to_preview_deque_mutex);
-        to_preview_deque_cv.wait(
-            to_preview_deque_lock,
-            [&]{return !to_preview_deque.empty() || end_program;}
-        );
+        if (frame == nullptr) {
+            to_preview_deque_cv.wait(
+                to_preview_deque_lock,
+                [&]{return !to_preview_deque.empty() || end_program;}
+            );
+        }
         if (end_program)
         {
             break;
@@ -176,17 +180,22 @@ void preview(bool color)
             to_preview_deque.back()->decrRefCount();
             to_preview_deque.pop_back();
         }
-        Frame *frame = to_preview_deque.back();
-        to_preview_deque.pop_back();
+        if (!to_preview_deque.empty()) {
+            if (frame != nullptr) {
+                frame->decrRefCount();
+            }
+            frame = to_preview_deque.back();
+            to_preview_deque.pop_back();
+            // Calculate framerate over last NUM_FRAMERATE_FRAMES
+            auto now = steady_clock::now();
+            timestamps.push_front(now);
+            auto then = timestamps.back();
+            timestamps.pop_back();
+            duration<double> elapsed = now - then;
+            framerate = (double)NUM_FRAMERATE_FRAMES / elapsed.count();
+        }
         to_preview_deque_lock.unlock();
 
-        // Calculate framerate over last NUM_FRAMERATE_FRAMES
-        auto now = steady_clock::now();
-        timestamps.push_front(now);
-        auto then = timestamps.back();
-        timestamps.pop_back();
-        duration<double> elapsed = now - then;
-        double framerate = (double)NUM_FRAMERATE_FRAMES / elapsed.count();
         char window_title[512];
         if (disk_file_exists)
         {
@@ -246,8 +255,8 @@ void preview(bool color)
 
 
         // Display histogram
-        now = steady_clock::now();
-        elapsed = now - last_histogram_update;
+        auto now = steady_clock::now();
+        duration<double> elapsed = now - last_histogram_update;
         if (elapsed.count() >= HISTOGRAM_UPDATE_PERIOD_S)
         {
             make_histogram(img_raw);
@@ -275,7 +284,6 @@ void preview(bool color)
             }
         }
 
-        frame->decrRefCount();
     }
 
     printf("Preview thread ending.\n");

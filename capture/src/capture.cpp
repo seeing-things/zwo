@@ -31,7 +31,7 @@ std::atomic_bool agc_enabled = false;
 
 // AGC outputs
 std::atomic_int camera_gain = camera::GAIN_MAX;
-std::atomic_int camera_exposure_us = camera::EXPOSURE_MAX_US;
+std::atomic_int camera_exposure_us = 100'000; //camera::EXPOSURE_MAX_US;
 
 // disk thread state
 std::atomic_bool disk_file_exists = false;
