@@ -10,6 +10,7 @@
 #include <sys/syscall.h>
 #include <err.h>
 #include "Frame.h"
+#include "agc.h"
 
 
 // All threads should end gracefully when this is true
@@ -178,7 +179,6 @@ void camera::init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name, int bin
 
 void camera::run_camera(ASI_CAMERA_INFO &CamInfo)
 {
-    constexpr int AGC_PERIOD_MS = 100;
     ASI_ERROR_CODE asi_rtn;
 
     asi_rtn = ASIStartVideoCapture(CamInfo.CameraID);

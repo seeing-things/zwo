@@ -1,4 +1,5 @@
 #include "agc.h"
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -90,19 +91,70 @@ void agc()
 
         printf("%.1f-th percentile value: %d, ", 100*threshold_fraction, percentile_value);
 
+
+        uint8_t max_pixel_value = 255;
+        while (hist[max_pixel_value] == 0)
+        {
+            max_pixel_value--;
+        }
+
+        printf("max pixel value: %d\n", max_pixel_value);
+
+        constexpr uint32_t MAX_SATURATED_PIXELS = 10;
+        constexpr uint8_t MIN_MAX_PIXEL_VALUE = 220;
+        constexpr int GAIN_STEP = 20;
+        if (hist[255] > MAX_SATURATED_PIXELS)
+        {
+            camera_gain = std::clamp(static_cast<int>(camera_gain - GAIN_STEP), GAIN_MIN, GAIN_MAX);
+            printf("changed camera gain to %3d\n", static_cast<int>(camera_gain));
+        }
+        else if (max_pixel_value < MIN_MAX_PIXEL_VALUE)
+        {
+            camera_gain = std::clamp(static_cast<int>(camera_gain + GAIN_STEP), GAIN_MIN, GAIN_MAX);
+            printf("changed camera gain to %3d\n", static_cast<int>(camera_gain));
+        }
+
+        // constexpr double alpha = 0.01;
+        // uint8_t target_pixel_value = 200;
+        // double error = 0;
+
+        // provide some hysteresis
+        // if (max_pixel_value < target_pixel_value - 10 || max_pixel_value == 255)
+        // {
+        //     if (max_pixel_value == 255)
+        //     {
+        //         // proportional to number of saturated pixels
+        //         // error = GAIN_MAX * static_cast<double>(hist[max_pixel_value]) / Frame::IMAGE_SIZE_BYTES;
+        //         error = 50;
+        //     }
+        //     else
+        //     {
+        //         error = -std::log(static_cast<double>(target_pixel_value) / max_pixel_value) / alpha;
+        //     }
+
+        //     printf("error: %lf\n", error);
+
+        //     constexpr double agc_gain = 0.25;
+        //     // if (abs(error) > 20.0)
+        //     // {
+        //         camera_gain = std::clamp(static_cast<int>(camera_gain - agc_gain * error), GAIN_MIN, GAIN_MAX);
+        //         printf("changed camera gain to %3d\n", static_cast<int>(camera_gain));
+        //     // }
+        // }
+
         // Adjust AGC
-        int g = camera_gain;
-        printf("gain: %03d", g);
-        if (percentile_value >= 250 && camera_gain > GAIN_MIN)
-        {
-            camera_gain -= 1;
-            printf(" -");
-        }
-        else if (percentile_value < 200 && camera_gain < GAIN_MAX)
-        {
-            camera_gain += 1;
-            printf(" +");
-        }
+        // int g = camera_gain;
+        // printf("gain: %03d", g);
+        // if (percentile_value >= 250 && camera_gain > GAIN_MIN)
+        // {
+        //     camera_gain -= 1;
+        //     printf(" -");
+        // }
+        // else if (percentile_value < 200 && camera_gain < GAIN_MAX)
+        // {
+        //     camera_gain += 1;
+        //     printf(" +");
+        // }
         // agc_value = std::clamp(agc_value, GAIN_MIN, GAIN_MAX);
 
         // printf("AGC value: %.3f, ", agc_value);
