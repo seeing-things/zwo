@@ -186,7 +186,7 @@ void preview(bool color)
         auto then = timestamps.back();
         timestamps.pop_back();
         duration<double> elapsed = now - then;
-        double framerate = (double)NUM_FRAMERATE_FRAMES / elapsed.count();
+        double framerate = (double)(NUM_FRAMERATE_FRAMES - 1) / elapsed.count();
         char window_title[512];
         if (disk_file_exists)
         {

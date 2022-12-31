@@ -56,6 +56,7 @@ The following libraries are required for building the `capture` program (Debian 
 - librt (libc6-dev)
 - libpthread (libc6-dev)
 - libbsd (libbsd-dev)
+- libspdlog (libspdlog-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
 - libopencv-core (libopencv-core-dev)
 - libopencv-highgui (libopencv-highgui-dev)

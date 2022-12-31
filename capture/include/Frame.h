@@ -17,6 +17,10 @@ public:
 
     void incrRefCount();
     void decrRefCount();
+    uint16_t syncStart();
+    uint16_t syncEnd();
+    uint16_t frameIndex();
+    bool validate();
 
     // Must be initialized before first object is constructed
     static size_t IMAGE_SIZE_BYTES;

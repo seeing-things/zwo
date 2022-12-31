@@ -17,7 +17,7 @@ USB = -I../libusb/include  -L../libusb/$(PLATFORM) -lusb-1.0
 # "hack" for compat with Arch Linux's opencv include path, since we aren't using pkg-config in here for some idiotic reason
 OPENCV += -I/usr/include/opencv4
 
-LIBS = -lrt -lbsd
+LIBS = -lrt -lbsd -lusb-1.0
 
 
 ASI_VERSION = 1.18

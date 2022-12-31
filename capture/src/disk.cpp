@@ -54,7 +54,7 @@ void write_to_disk(
     }
     else
     {
-        warnx("No filename provided; not writing to disk!\n");
+        warnx("No filename provided; not writing to disk!");
     }
 
     while (!end_program)

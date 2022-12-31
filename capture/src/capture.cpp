@@ -19,6 +19,14 @@
 #include "camera.h"
 
 
+/*
+ * This is the total number of Frame objects (frame buffers) that will be allocated. A larger
+ * number increases memory usage but decreases the risk that the pool of available frames runs out
+ * if for example the to_disk_queue gets backed up momentarily.
+ */
+constexpr size_t FRAME_POOL_SIZE = 64;
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Globals accessed by all threads
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -123,24 +131,19 @@ int main(int argc, char *argv[])
         }
     }
 
-    /*
-     * Set real-time priority for the main thread. All threads created later, including by the ASI
-     * library, will inherit this priority.
-     */
-    set_thread_priority(pthread_self(), SCHED_RR, 10);
-    set_thread_name(pthread_self(), "capture:main");
-
     bool zwo_fixer_ok = ZWOFixerInit();
     (void)zwo_fixer_ok; // currently unused
 
+    // libasicamera2 threads will inherit this name
+    set_thread_name(pthread_self(), "libasicamera2");
     ASI_CAMERA_INFO CamInfo;
     camera::init_camera(CamInfo, cam_name, binning);
+    set_thread_name(pthread_self(), "camera(main)");
 
     // Create pool of frame buffers
     Frame::WIDTH = CamInfo.MaxWidth / binning;
     Frame::HEIGHT = CamInfo.MaxHeight / binning;
     Frame::IMAGE_SIZE_BYTES = Frame::WIDTH * Frame::HEIGHT;
-    constexpr size_t FRAME_POOL_SIZE = 64;
     static std::deque<Frame> frames;
     for(size_t i = 0; i < FRAME_POOL_SIZE; i++)
     {
@@ -160,13 +163,13 @@ int main(int argc, char *argv[])
     static std::thread preview_thread(preview, CamInfo.IsColorCam == ASI_TRUE);
     static std::thread agc_thread(agc);
 
-    // These threads do not need real-time priority
-    set_thread_priority(preview_thread.native_handle(), SCHED_OTHER, 0);
-    set_thread_priority(agc_thread.native_handle(), SCHED_OTHER, 0);
+    // Set real-time priority for latency-sensitive threads.
+    set_thread_priority(pthread_self(), SCHED_RR, 10);
+    set_thread_priority(write_to_disk_thread.native_handle(), SCHED_RR, 10);
 
-    set_thread_name(write_to_disk_thread.native_handle(), "capture:disk");
-    set_thread_name(preview_thread.native_handle(), "capture:preview");
-    set_thread_name(agc_thread.native_handle(), "capture:gain");
+    set_thread_name(write_to_disk_thread.native_handle(), "disk");
+    set_thread_name(preview_thread.native_handle(), "preview");
+    set_thread_name(agc_thread.native_handle(), "agc");
 
     // Get frames from camera and dispatch them to the other threads
     camera::run_camera(CamInfo);
