@@ -22,4 +22,5 @@ find_package(PkgConfig REQUIRED)
 pkg_search_module(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
 pkg_search_module(LIBBSD REQUIRED IMPORTED_TARGET libbsd)
 
+add_subdirectory(../zwo_fixer zwo_fixer)
 add_subdirectory(src)
