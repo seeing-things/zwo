@@ -1,7 +1,11 @@
 add_executable(capture agc.cpp camera.cpp capture.cpp disk.cpp Frame.cpp preview.cpp SERFile.cpp)
 
 target_compile_features(capture PRIVATE cxx_std_17)
+# setting compiler options directly isn't portable since they're compiler-specific, but I never
+# promised this would work with anything other than gcc
+target_compile_options(capture PRIVATE -Wall)
 set_target_properties(capture PROPERTIES CXX_EXTENSIONS OFF)
+set_target_properties(capture PROPERTIES RUNTIME_OUTPUT_DIRECTORY ..)
 
 target_include_directories(capture PRIVATE ../include)
 target_include_directories(capture PRIVATE ../../zwo_fixer)
