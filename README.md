@@ -47,10 +47,10 @@ The API provided by this package matches the C API very closely with a few minor
 - Efficient memory and CPU resource management
 - Real-time priorization of critical threads
 - Writes raw camera data directly to disk in SER format
-- Custom automatic gain and exposure control
+- Custom automatic gain control
 - Live preview, implemented in a manner that minimizes likelihood of frame loss due to resource contention
 
-To compile this software, a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the build-essential package for this.
+To compile this software, a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the `build-essential` package for this.
 
 The following libraries are required for building the `capture` program (Debian package names in parentheses):
 - librt (libc6-dev)
@@ -58,12 +58,19 @@ The following libraries are required for building the `capture` program (Debian 
 - libbsd (libbsd-dev)
 - libspdlog (libspdlog-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
-- libopencv-core (libopencv-core-dev)
-- libopencv-highgui (libopencv-highgui-dev)
-- libopencv-imgproc (libopencv-imgproc-dev)
-- libzwo_fixer -- built from the source contained in this repository
+- libopencv-dev (libopencv-dev)
+- libzwo_fixer -- this is built automatically from the source contained in this repository.
 
-Once the dependencies are installed, run `make PLATFORM=x64` in the `capture/` subdirectory. This should generate a binary `capture/bin/capture`. (To build for 32-bit x86, use `PLATFORM=x86`; for ARM, set `PLATFORM` to `armv5`/`armv6`/`armv7`/`armv8` as appropriate. This is an ugly Makefile detail that will hopefully be removed at some point.)
+Once the dependencies are installed, run the following commands starting from the `capture/` subdirectory:
+
+```
+mkdir build
+cd build
+cmake ..
+make
+```
+
+This should generate a binary `capture/build/capture`. You can then optionally run `make install` to install it.
 
 ## Enabling Realtime Priorities for Non-Root Users
 
