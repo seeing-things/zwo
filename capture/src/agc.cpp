@@ -8,6 +8,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <unistd.h>
+#include <spdlog/spdlog.h>
 #include <sys/syscall.h>
 #include "Frame.h"
 #include "camera.h"
@@ -41,7 +42,7 @@ void agc()
      */
     static double agc_value = 0.0;
 
-    printf("gain thread id: %ld\n", syscall(SYS_gettid));
+    spdlog::info("Gain thread id: {}", syscall(SYS_gettid));
 
     while (!end_program)
     {
@@ -95,36 +96,28 @@ void agc()
         }
         agc_value = std::clamp(agc_value, 0.0, 1.0);
 
-        printf("AGC value: %.3f, upper tail value: %03d", agc_value, upper_tail_val);
-
         // derive new camera gain
-        int new_gain = std::clamp(
+        camera_gain = std::clamp(
             (int)(4.0 * GAIN_MAX * agc_value - (3.0 * GAIN_MAX)),
             GAIN_MIN,
             GAIN_MAX
         );
-        printf(", gain: %03d", new_gain);
-        if (new_gain != camera_gain)
-        {
-            printf(" %c", (new_gain > camera_gain ? '+' : '-'));
-            camera_gain = new_gain;
-        }
 
         // derive new camera exposure time
-        int new_exposure_us = std::clamp(
+        camera_exposure_us = std::clamp(
             (int)(4.0 / 3.0 * EXPOSURE_MAX_US * agc_value),
             EXPOSURE_MIN_US,
             EXPOSURE_MAX_US
         );
-        printf(", exposure: %05.2f ms", (float)new_exposure_us / 1.0e3);
-        if (new_exposure_us != camera_exposure_us)
-        {
-            printf(" %c", (new_exposure_us > camera_exposure_us ? '+' : '-'));
-            camera_exposure_us = new_exposure_us;
-        }
 
-        printf("\n");
+        spdlog::debug(
+            "AGC value: {:.3f}, upper tail value: {:03d}, gain: {:03d}, exposure: {:05.3f} ms",
+            agc_value,
+            upper_tail_val,
+            camera_gain,
+            (float)camera_exposure_us / 1.0e3
+        );
     }
 
-    printf("AGC thread ending.\n");
+    spdlog::info("AGC thread ending.");
 }

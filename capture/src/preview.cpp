@@ -5,6 +5,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <unistd.h>
+#include <spdlog/spdlog.h>
 #include <sys/syscall.h>
 #include <spdlog/spdlog.h>
 #include <opencv2/highgui.hpp>
@@ -118,7 +119,7 @@ void agc_mode_trackbar_callback(int pos, void *userdata)
 
 void preview(bool color)
 {
-    printf("preview thread id: %ld\n", syscall(SYS_gettid));
+    spdlog::info("Preview thread id: {}", syscall(SYS_gettid));
 
     cv::namedWindow(PREVIEW_WINDOW_NAME, cv::WINDOW_NORMAL);
     cv::resizeWindow(PREVIEW_WINDOW_NAME, 640, 480);
@@ -301,16 +302,16 @@ void preview(bool color)
             disk_write_enabled = !disk_write_enabled;
             if (disk_write_enabled)
             {
-                printf("Writing frames to disk if filename provided (press s to stop)\n");
+                spdlog::info("Writing frames to disk if filename provided (press s to stop).");
             }
             else
             {
-                printf("Not writing frames to disk (press s to start)\n");
+                spdlog::info("Not writing frames to disk (press s to start).");
             }
         }
 
         frame->decrRefCount();
     }
 
-    printf("Preview thread ending.\n");
+    spdlog::info("Preview thread ending.");
 }

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <unistd.h>
+#include <spdlog/spdlog.h>
 #include <sys/syscall.h>
 #include <err.h>
 #include "Frame.h"
@@ -72,7 +73,13 @@ static void set_thread_priority(pthread_t thread, int policy, int priority)
     sch_params.sched_priority = priority;
     if ((errno = pthread_setschedparam(thread, policy, &sch_params)))
     {
-        err(1, "Failed to set thread priority (%d, %d)", policy, priority);
+        char buf[256];
+        spdlog::critical("Failed to set thread priority to policy {}, priority {}: {}",
+            policy,
+            priority,
+            strerror_r(errno, buf, sizeof(buf))
+        );
+        exit(1);
     }
 }
 
@@ -80,7 +87,12 @@ static void set_thread_name(pthread_t thread, const char *name)
 {
     if ((errno = pthread_setname_np(thread, name)))
     {
-        warn("Failed to set thread name (\"%s\")", name);
+        char buf[256];
+        spdlog::error(
+            "Failed to set thread name to '{}': {}",
+            name,
+            strerror_r(errno, buf, sizeof(buf))
+        );
     }
 }
 
@@ -99,7 +111,7 @@ int main(int argc, char *argv[])
 {
     signal(SIGINT, sigint_handler);
 
-    printf("main thread id: %ld\n", syscall(SYS_gettid));
+    spdlog::info("Main (camera) thread id: {}", syscall(SYS_gettid));
 
     const char *cam_name = nullptr;
     const char *filename = nullptr;
@@ -170,13 +182,13 @@ int main(int argc, char *argv[])
     // Get frames from camera and dispatch them to the other threads
     camera::run_camera(CamInfo);
 
-    printf("Main (camera) thread done, waiting for others to finish.\n");
+    spdlog::info("Main (camera) thread done, waiting for others to finish.");
 
     write_to_disk_thread.join();
     preview_thread.join();
     agc_thread.join();
 
-    printf("Main thread ending.\n");
+    spdlog::info("Main thread ending.");
 
     return 0;
 }

@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <err.h>
+#include <spdlog/spdlog.h>
 
 
 SERFile::SERFile(
@@ -28,25 +29,38 @@ SERFile::SERFile(
 
     if (access(filename, F_OK) != -1)
     {
-        errx(1, "File %s already exists! Refusing to overwrite it.", filename);
+        spdlog::critical("File {} already exists! Refusing to overwrite it.", filename);
+        exit(1);
     }
 
     fd_ = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0644);
     if (fd_ < 0)
     {
-        err(1, "open(%s) failed", filename);
+        char buf[256];
+        spdlog::critical("open({}) failed: {}", filename, strerror_r(errno, buf, sizeof(buf)));
+        exit(1);
     }
 
     // Extend file size to length of header
     if (ftruncate(fd_, sizeof(SERHeader_t)))
     {
-        err(1, "could not extend file to make room for SER header");
+        char buf[256];
+        spdlog::critical(
+            "Could not extend file to make room for SER header: {}",
+            strerror_r(errno, buf, sizeof(buf))
+        );
+        exit(1);
     }
 
     // Reposition file descriptor offset past header
     if (lseek(fd_, 0, SEEK_END) < 0)
     {
-        err(1, "could not seek past header in SER file");
+        char buf[256];
+        spdlog::critical(
+            "Could not seek past header in SER file: {}",
+            strerror_r(errno, buf, sizeof(buf))
+        );
+        exit(1);
     }
 
     // Map the header portion of the file into memory
@@ -60,7 +74,12 @@ SERFile::SERFile(
     );
     if (header_ == MAP_FAILED)
     {
-        err(1, "mmap for SERFile header failed");
+        char buf[256];
+        spdlog::critical(
+            "mmap for SERFile header failed: {}",
+            strerror_r(errno, buf, sizeof(buf))
+        );
+        exit(1);
     }
 
     // Use placement new operator to init header to defaults in struct definition
@@ -85,7 +104,7 @@ SERFile::~SERFile()
     {
         if (header_->FrameCount != static_cast<int32_t>(frame_timestamps_.size()))
         {
-            warnx("SERFile class frame count %d does not match timestamp vector size %zu",
+            spdlog::error("SERFile class frame count {} does not match timestamp vector size {}",
                 header_->FrameCount,
                 frame_timestamps_.size()
             );
@@ -95,17 +114,34 @@ SERFile::~SERFile()
         ssize_t n = write(fd_, frame_timestamps_.data(), trailer_len_bytes);
         if (n < 0)
         {
-            err(1, "write failed");
+            char buf[256];
+            spdlog::critical(
+                "SER file trailer write failed: {}",
+                strerror_r(errno, buf, sizeof(buf))
+            );
+            exit(1);
         }
         else if (n != static_cast<ssize_t>(trailer_len_bytes))
         {
-            err(1, "write incomplete (%zd/%zu)", n, trailer_len_bytes);
+            char buf[256];
+            spdlog::critical(
+                "SER file trailer write incomplete ({}/{}): {}",
+                n,
+                trailer_len_bytes,
+                strerror_r(errno, buf, sizeof(buf))
+            );
+            exit(1);
         }
     }
 
     if (munmap(header_, sizeof(SERHeader_t)))
     {
-        err(1, "munmap for SERFile header failed");
+        char buf[256];
+        spdlog::critical(
+            "munmap for SERFile header failed: {}",
+            strerror_r(errno, buf, sizeof(buf))
+        );
+        exit(1);
     }
     (void)close(fd_);
 }
@@ -114,12 +150,12 @@ void SERFile::addFrame(Frame &frame)
 {
     if (bytes_per_frame_ != Frame::IMAGE_SIZE_BYTES)
     {
-        errx(
-            1,
-            "frame size %zu bytes does not match expected size %zu bytes",
+        spdlog::error(
+            "frame size {} bytes does not match expected size {} bytes",
             Frame::IMAGE_SIZE_BYTES,
             bytes_per_frame_
         );
+        exit(1);
     }
 
     if (add_trailer_)
@@ -132,11 +168,23 @@ void SERFile::addFrame(Frame &frame)
     ssize_t n = write(fd_, frame.frame_buffer_, bytes_per_frame_);
     if (n < 0)
     {
-        err(1, "write failed");
+        char buf[256];
+        spdlog::critical(
+            "write failed: {}",
+            strerror_r(errno, buf, sizeof(buf))
+        );
+        exit(1);
     }
     else if (n != static_cast<ssize_t>(bytes_per_frame_))
     {
-        err(1, "write incomplete (%zd/%zu)", n, bytes_per_frame_);
+        char buf[256];
+        spdlog::critical(
+            "write incomplete ({}/{}): {}",
+            n,
+            bytes_per_frame_,
+            strerror_r(errno, buf, sizeof(buf))
+        );
+        exit(1);
     }
 
     header_->FrameCount++;

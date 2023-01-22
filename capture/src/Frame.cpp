@@ -17,7 +17,10 @@ Frame::Frame() :
 {
     if (IMAGE_SIZE_BYTES == 0)
     {
-        errx(1, "Frame: IMAGE_SIZE_BYTES must be set to a non-zero value before construction");
+        spdlog::critical(
+            "Frame: IMAGE_SIZE_BYTES must be set to a non-zero value before construction."
+        );
+        exit(1);
     }
     frame_buffer_ = new uint8_t[IMAGE_SIZE_BYTES];
     std::unique_lock<std::mutex> unused_deque_lock(unused_deque_mutex);
@@ -44,7 +47,8 @@ void Frame::decrRefCount()
 
     if (ref_count_ <= 0)
     {
-        errx(1, "Frame.decrRefCount called on Frame where ref_count_ was already zero!");
+        spdlog::critical("Frame.decrRefCount called on Frame where ref_count_ was already zero!");
+        exit(1);
     }
 
     ref_count_--;

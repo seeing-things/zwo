@@ -590,6 +590,7 @@ void camera::run_camera(ASI_CAMERA_INFO &CamInfo)
                     ASI_FALSE
                 );
                 gain_prev = camera_gain;
+                spdlog::info("Camera gain set to {:03d}", camera_gain);
             }
 
             // Set exposure time if value was updated in another thread
@@ -603,6 +604,10 @@ void camera::run_camera(ASI_CAMERA_INFO &CamInfo)
                     ASI_FALSE
                 );
                 exposure_us_prev = camera_exposure_us;
+                spdlog::info(
+                    "Camera exposure time set to {:6.3f} ms",
+                    (float)exposure_us_prev / 1.0e3
+                );
             }
         }
     }
