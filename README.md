@@ -2,7 +2,7 @@ This repository contains the ZWO ASI camera SDK along with some software that de
 
 # Installing the SDK
 
-The [SDK](https://astronomy-imaging-camera.com/software-drivers) is provided by ZWO in the form of a header file and shared object files for Linux and Windows. The Linux version of the library can be installed on Debian-based systems (including Ubuntu) via a PPA as the `libasicamera2` package by following the steps in this section.
+The [SDK](https://astronomy-imaging-camera.com/software-drivers) is provided by ZWO in the form of a header file and shared object files for Linux and Windows. Several versions of the SDK come bundled with this repository. Alternatively, the Linux version of the library can be installed on Debian-based systems (including Ubuntu) via a PPA as the `libasicamera2` package by following the steps in this section.
 
 First, add the URL for the SDK PPA to a sources.list file:
 
@@ -16,7 +16,7 @@ Now it should be possible to update the package cache and install:
 
 # ZWO Fixer
 
-`zwo_fixer` is a shim library which patches a bug in the ASI library. It is an optional dependency for the Python package and the Capture software included in this repository. To compile a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the build-essential package for this.
+`zwo_fixer` is a shim library which patches a bug in the ASI library. To compile a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the `build-essential` package for this.
 
 The following libraries are required for building the `zwo_fixer` shim library (Debian package names in parentheses):
 - librt (libc6-dev)
@@ -25,6 +25,10 @@ The following libraries are required for building the `zwo_fixer` shim library (
 - libbsd (libbsd-dev)
 - libelf (libelf-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
+
+Once the dependencies are installed, run `make` from the `zwo_fixer/` subdirectory. This will generate `libzwo_fixer.so`.
+
+See `zwo_fixer/zwo_fixer.hpp` for instructions on how to use it.
 
 
 # Python Bindings
@@ -47,27 +51,35 @@ The API provided by this package matches the C API very closely with a few minor
 - Efficient memory and CPU resource management
 - Real-time priorization of critical threads
 - Writes raw camera data directly to disk in SER format
-- Custom automatic gain and exposure control
+- Custom automatic gain control
 - Live preview, implemented in a manner that minimizes likelihood of frame loss due to resource contention
 
-To compile this software, a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the build-essential package for this.
+To compile this software, a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the `build-essential` package for this.
 
-The following libraries are required for building the `capture` program (Debian package names in parentheses):
-- librt (libc6-dev)
-- libpthread (libc6-dev)
+The following packages are required for building the `capture` program (Debian package names in parentheses):
+- cmake (cmake)
 - libbsd (libbsd-dev)
+- libopencv-dev (libopencv-dev)
+- libpthread (libc6-dev)
+- librt (libc6-dev)
 - libspdlog (libspdlog-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
-- libopencv-core (libopencv-core-dev)
-- libopencv-highgui (libopencv-highgui-dev)
-- libopencv-imgproc (libopencv-imgproc-dev)
-- libzwo_fixer -- built from the source contained in this repository
+- pkg-config (pkg-config)
 
-Once the dependencies are installed, run `make PLATFORM=x64` in the `capture/` subdirectory. This should generate a binary `capture/bin/capture`. (To build for 32-bit x86, use `PLATFORM=x86`; for ARM, set `PLATFORM` to `armv5`/`armv6`/`armv7`/`armv8` as appropriate. This is an ugly Makefile detail that will hopefully be removed at some point.)
+Once the dependencies are installed, run the following commands starting from the `capture/` subdirectory:
+
+```
+mkdir build
+cd build
+cmake ..
+make
+```
+
+This should generate a binary `capture/build/capture`. You can then optionally run `make install` to install it.
 
 ## Enabling Realtime Priorities for Non-Root Users
 
-Generally you'll want to run the software with realtime priority to reduce the likelihood of the OS scheduler causing pauses that would result in dropped data.
+Generally you'll want to run the `capture` with realtime priority to reduce the likelihood of the OS scheduler causing pauses that would result in dropped data.
 
 On Linux, running programs with realtime priority (using e.g. the `chrt` utility) is typically not allowed for non-root users, to prevent abuse of a shared system. As such, switching user to root or using `sudo` is necessary to run a program with RT priority. For dedicated systems, it's possible (and actually rather easy) to configure the system to allow non-root users to do so.
 
