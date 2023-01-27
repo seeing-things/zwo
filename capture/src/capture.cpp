@@ -11,7 +11,6 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <err.h>
-#include <zwo_fixer.hpp>
 #include "Frame.h"
 #include "agc.h"
 #include "disk.h"
@@ -130,9 +129,6 @@ int main(int argc, char *argv[])
             );
         }
     }
-
-    bool zwo_fixer_ok = ZWOFixerInit();
-    (void)zwo_fixer_ok; // currently unused
 
     // libasicamera2 threads will inherit this name
     set_thread_name(pthread_self(), "libasicamera2");

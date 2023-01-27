@@ -8,7 +8,6 @@ set_target_properties(capture PROPERTIES CXX_EXTENSIONS OFF)
 set_target_properties(capture PROPERTIES RUNTIME_OUTPUT_DIRECTORY ..)
 
 target_include_directories(capture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
-target_include_directories(capture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../zwo_fixer)
 target_include_directories(capture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../1.18/linux_sdk/include)
 
 target_link_directories(capture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../1.18/linux_sdk/lib/x64)
@@ -19,4 +18,3 @@ target_link_libraries(capture PRIVATE ${OpenCV_LIBS})
 target_link_libraries(capture PRIVATE Threads::Threads)
 target_link_libraries(capture PRIVATE spdlog::spdlog)
 target_link_libraries(capture PRIVATE libASICamera2.so.1.18)
-target_link_libraries(capture PRIVATE libzwo_fixer)

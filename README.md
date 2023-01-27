@@ -59,7 +59,6 @@ The following libraries are required for building the `capture` program (Debian 
 - libspdlog (libspdlog-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
 - libopencv-dev (libopencv-dev)
-- libzwo_fixer -- this is built automatically from the source contained in this repository.
 
 Once the dependencies are installed, run the following commands starting from the `capture/` subdirectory:
 
