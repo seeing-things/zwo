@@ -16,7 +16,7 @@ Now it should be possible to update the package cache and install:
 
 # ZWO Fixer
 
-`zwo_fixer` is a shim library which patches a bug in the ASI library. It is an optional dependency for the Python package and the Capture software included in this repository. To compile a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the build-essential package for this.
+`zwo_fixer` is a shim library which patches a bug in the ASI library. To compile a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the `build-essential` package for this.
 
 The following libraries are required for building the `zwo_fixer` shim library (Debian package names in parentheses):
 - librt (libc6-dev)
@@ -52,13 +52,15 @@ The API provided by this package matches the C API very closely with a few minor
 
 To compile this software, a C++ compiler is required. On Debian-based Linux distributions (e.g. Ubuntu), you will need the `build-essential` package for this.
 
-The following libraries are required for building the `capture` program (Debian package names in parentheses):
-- librt (libc6-dev)
-- libpthread (libc6-dev)
+The following packages are required for building the `capture` program (Debian package names in parentheses):
+- cmake (cmake)
 - libbsd (libbsd-dev)
+- libopencv-dev (libopencv-dev)
+- libpthread (libc6-dev)
+- librt (libc6-dev)
 - libspdlog (libspdlog-dev)
 - libusb-1.0 (libusb-1.0-0-dev)
-- libopencv-dev (libopencv-dev)
+- pkg-config (pkg-config)
 
 Once the dependencies are installed, run the following commands starting from the `capture/` subdirectory:
 
