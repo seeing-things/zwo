@@ -17,6 +17,7 @@
 #include "disk.h"
 #include "preview.h"
 #include "camera.h"
+#include "SERFile.h"
 
 
 /*
@@ -107,6 +108,45 @@ void sigint_handler(int signal)
 }
 
 
+void check_if_file_exists(const char *filename)
+{
+    if (access(filename, F_OK) == -1)
+    {
+        // the file doesn't already exist, so we're okay to create a new one
+        disk_file_exists = true;
+        return;
+    }
+
+    while (true) {
+        printf("%s already exists. Do you want to overwrite it? [y/N] ", filename);
+        char selection;
+        int scanned = scanf("%c", &selection);
+        if (scanned == 1) {
+            if (selection == 'y' || selection == 'Y') {
+                spdlog::info("User approved overwriting {}.", filename);
+                disk_file_exists = true;
+                return;
+            } else if (selection == 'n' || selection == 'N' || selection == '\n') {
+                spdlog::critical("File {} exists and user declined to overwrite it.", filename);
+                exit(1);
+            }
+        }
+        printf("Invalid selection.\n");
+
+        // clear out stdin
+        while (true) {
+            int c = getchar();
+            if (c == EOF) {
+                exit(1);
+            }
+            if (c == '\n') {
+                break;
+            }
+        }
+    }
+}
+
+
 int main(int argc, char *argv[])
 {
     signal(SIGINT, sigint_handler);
@@ -125,7 +165,6 @@ int main(int argc, char *argv[])
         else if (strncmp(argv[i], "file=", 5) == 0)
         {
             filename = argv[i] + 5;
-            disk_file_exists = true;
         }
         else if (strncmp(argv[i], "binning=", 8) == 0)
         {
@@ -159,15 +198,26 @@ int main(int argc, char *argv[])
         frames.emplace_back();
     }
 
+    std::unique_ptr<SERFile> ser_file;
+    if (filename != nullptr) {
+        check_if_file_exists(filename);
+        ser_file.reset(new SERFile(
+            filename,
+            Frame::WIDTH,
+            Frame::HEIGHT,
+            (CamInfo.IsColorCam == ASI_TRUE) ? BAYER_RGGB : MONO,
+            8,
+            "",
+            CamInfo.Name,
+            ""
+        ));
+        spdlog::info("Creating output file {}.", filename);
+    } else {
+        spdlog::info("No output SER filename provided.");
+    }
+
     // Start threads
-    static std::thread write_to_disk_thread(
-        write_to_disk,
-        filename,
-        CamInfo.Name,
-        CamInfo.IsColorCam == ASI_TRUE,
-        Frame::WIDTH,
-        Frame::HEIGHT
-    );
+    static std::thread write_to_disk_thread(write_to_disk, ser_file.get());
     static std::thread preview_thread(preview, CamInfo.IsColorCam == ASI_TRUE);
     static std::thread agc_thread(agc);
 

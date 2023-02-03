@@ -104,9 +104,9 @@ public:
     void addFrame(Frame &frame);
     static int64_t utcOffset();
 
+    const std::string FILENAME;
 
 private:
-    const std::string FILENAME;
     const int64_t UTC_OFFSET_S;
     SERHeader_t *header_;
     int fd_;

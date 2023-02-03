@@ -9,7 +9,6 @@
 #include <sys/syscall.h>
 #include <sys/statvfs.h>
 #include "Frame.h"
-#include "SERFile.h"
 
 
 constexpr int64_t MIN_FREE_DISK_SPACE_BYTES = 100 << 20; // 100 MiB
@@ -25,38 +24,12 @@ extern std::atomic_bool disk_write_enabled;
 
 
 // Writes frames of data to disk as quickly as possible. Run as a thread.
-void write_to_disk(
-    const char *filename,
-    const char *camera_name,
-    bool color,
-    int32_t image_width,
-    int32_t image_height)
+void write_to_disk(SERFile *ser_file)
 {
     spdlog::info("Disk thread id: {}", syscall(SYS_gettid));
 
-    std::unique_ptr<SERFile> ser_file;
     struct statvfs disk_stats;
     int32_t frame_count = 0;
-
-    if (filename != nullptr)
-    {
-        ser_file.reset(
-            new SERFile(
-                filename,
-                image_width,
-                image_height,
-                (color) ? BAYER_RGGB : MONO,
-                8,
-                "",
-                camera_name,
-                ""
-            )
-        );
-    }
-    else
-    {
-        spdlog::warn("No filename provided; not writing to disk!");
-    }
 
     while (!end_program)
     {
@@ -74,12 +47,12 @@ void write_to_disk(
         to_disk_deque.pop_back();
         to_disk_deque_lock.unlock();
 
-        if (disk_write_enabled && disk_file_exists)
+        if (disk_write_enabled && ser_file != nullptr)
         {
             // Check free disk space (but not every single frame)
             if (frame_count % 100 == 0)
             {
-                if (statvfs(filename, &disk_stats) != 0)
+                if (statvfs(ser_file->FILENAME.c_str(), &disk_stats) != 0)
                 {
                     char buf[256];
                     spdlog::error(
