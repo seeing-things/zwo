@@ -18,6 +18,7 @@ SERFile::SERFile(
     const char *telescope,
     bool add_trailer
 ) :
+    FILENAME(filename),
     UTC_OFFSET_S(utcOffset()),
     add_trailer_(add_trailer)
 {
@@ -100,6 +101,22 @@ SERFile::SERFile(
 
 SERFile::~SERFile()
 {
+    if (header_->FrameCount == 0)
+    {
+        spdlog::info("Deleting {} since no frames were written to it.", FILENAME);
+        closeFile();
+        if (remove(FILENAME.c_str()))
+        {
+            char buf[256];
+            spdlog::error(
+                "Unable to delete {}: {}",
+                FILENAME,
+                strerror_r(errno, buf, sizeof(buf))
+            );
+        }
+        return;
+    }
+
     if (add_trailer_)
     {
         if (header_->FrameCount != static_cast<int32_t>(frame_timestamps_.size()))
@@ -134,6 +151,11 @@ SERFile::~SERFile()
         }
     }
 
+    closeFile();
+}
+
+void SERFile::closeFile()
+{
     if (munmap(header_, sizeof(SERHeader_t)))
     {
         char buf[256];

@@ -106,6 +106,7 @@ public:
 
 
 private:
+    const std::string FILENAME;
     const int64_t UTC_OFFSET_S;
     SERHeader_t *header_;
     int fd_;
@@ -114,5 +115,7 @@ private:
     std::vector<int64_t> frame_timestamps_;
 
     using TimestampPair_t = std::tuple<int64_t, int64_t>; // utc, local
+
+    void closeFile();
     TimestampPair_t makeTimestamps();
 };
