@@ -221,7 +221,17 @@ void preview(bool color)
             char window_title[512];
             if (disk_file_exists)
             {
-                sprintf(window_title, "%s %.1f FPS %s", PREVIEW_WINDOW_NAME, framerate, (disk_write_enabled) ? ("writing to disk") : ("disk write paused"));
+                sprintf(
+                    window_title,
+                    "%s %.1f FPS %s",
+                    PREVIEW_WINDOW_NAME,
+                    framerate,
+                    (disk_write_enabled) ? (
+                        "writing frames to disk (press s to pause)"
+                    ) : (
+                        "disk write paused (press s to resume)"
+                    )
+                );
             }
             else
             {
