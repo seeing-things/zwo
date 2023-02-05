@@ -45,9 +45,10 @@ int exposure_trackbar_pos;
 constexpr char PREVIEW_WINDOW_NAME[] = "Live Preview";
 constexpr char HISTOGRAM_WINDOW_NAME[] = "Histogram";
 
-// How often the histogram should be updated in seconds
-// Calculating the histogram is a non-trivial computational load
-constexpr double HISTOGRAM_UPDATE_PERIOD_S = 0.25;
+// Minimum time between window updates in seconds
+// These operations use a non-trivial amount of CPU
+constexpr double MIN_PREVIEW_UPDATE_PERIOD_S = 0.0;  // unlimited
+constexpr double MIN_HISTOGRAM_UPDATE_PERIOD_S = 0.25;  // 4 FPS max
 
 
 void make_histogram(cv::Mat &src)
@@ -84,6 +85,70 @@ void make_histogram(cv::Mat &src)
         );
     }
     imshow(HISTOGRAM_WINDOW_NAME, histImg);
+}
+
+
+void show_preview(cv::Mat &img_raw, bool color, float preview_frame_rate)
+{
+    char window_title[512];
+    if (disk_file_exists)
+    {
+        sprintf(
+            window_title,
+            "%s %.1f FPS (%.1f FPS from camera) %s",
+            PREVIEW_WINDOW_NAME,
+            preview_frame_rate,
+            (float)camera_frame_rate,
+            (disk_write_enabled) ? (
+                "writing frames to disk (press s to pause)"
+            ) : (
+                "disk write paused (press s to resume)"
+            )
+        );
+    }
+    else
+    {
+        sprintf(
+            window_title,
+            "%s %.1f FPS (%.1f FPS from camera)",
+            PREVIEW_WINDOW_NAME,
+            preview_frame_rate,
+            (float)camera_frame_rate
+        );
+    }
+    cv::setWindowTitle(PREVIEW_WINDOW_NAME, window_title);
+
+    // Debayer if color camera
+    cv::Mat img_preview;
+    if (color)
+    {
+        cv::cvtColor(img_raw, img_preview, cv::COLOR_BayerBG2BGR);
+    }
+    else
+    {
+        // Must make a copy so that crosshairs added later do not modify the original frame.
+        // Modifications to the original frame could end up being written to disk.
+        img_preview = img_raw.clone();
+    }
+
+    // Add grey crosshairs
+    cv::line(
+        img_preview,
+        cv::Point(Frame::WIDTH / 2, 0),
+        cv::Point(Frame::WIDTH / 2, Frame::HEIGHT - 1),
+        cv::Scalar(50, 50, 50),
+        1
+    );
+    cv::line(
+        img_preview,
+        cv::Point(0, Frame::HEIGHT / 2),
+        cv::Point(Frame::WIDTH - 1, Frame::HEIGHT / 2),
+        cv::Scalar(50, 50, 50),
+        1
+    );
+
+    // Show image with crosshairs in a window
+    cv::imshow(PREVIEW_WINDOW_NAME, img_preview);
 }
 
 
@@ -162,7 +227,8 @@ void preview(bool color)
     constexpr int NUM_FRAMERATE_FRAMES = 10;
     std::deque<steady_clock::time_point> timestamps(NUM_FRAMERATE_FRAMES, steady_clock::now());
 
-    auto last_histogram_update = steady_clock::now();
+    auto last_preview_update = steady_clock::now();
+    auto last_histogram_update = last_preview_update;
     bool preview_window_open = true;
     bool histogram_window_open = true;
 
@@ -197,14 +263,6 @@ void preview(bool color)
 
         cv::Mat img_raw(Frame::HEIGHT, Frame::WIDTH, CV_8UC1, (void *)(frame->frame_buffer_));
 
-        // Calculate framerate over last NUM_FRAMERATE_FRAMES
-        auto now = steady_clock::now();
-        timestamps.push_front(now);
-        auto then = timestamps.back();
-        timestamps.pop_back();
-        duration<float> elapsed = now - then;
-        float preview_frame_rate = (float)(NUM_FRAMERATE_FRAMES - 1) / elapsed.count();
-
         // Check if the preview window is actually still open
         if (preview_window_open)
         {
@@ -222,65 +280,21 @@ void preview(bool color)
 
         if (preview_window_open)
         {
-            char window_title[512];
-            if (disk_file_exists)
+            // Display histogram
+            auto now = steady_clock::now();
+            duration<float> elapsed = now - last_preview_update;
+            if (elapsed.count() >= MIN_PREVIEW_UPDATE_PERIOD_S)
             {
-                sprintf(
-                    window_title,
-                    "%s %.1f FPS (%.1f FPS from camera) %s",
-                    PREVIEW_WINDOW_NAME,
-                    preview_frame_rate,
-                    (float)camera_frame_rate,
-                    (disk_write_enabled) ? (
-                        "writing frames to disk (press s to pause)"
-                    ) : (
-                        "disk write paused (press s to resume)"
-                    )
-                );
-            }
-            else
-            {
-                sprintf(
-                    window_title,
-                    "%s %.1f FPS (%.1f FPS from camera)",
-                    PREVIEW_WINDOW_NAME,
-                    preview_frame_rate,
-                    (float)camera_frame_rate
-                );
-            }
-            cv::setWindowTitle(PREVIEW_WINDOW_NAME, window_title);
+                // Calculate preview window framerate over last NUM_FRAMERATE_FRAMES
+                timestamps.push_front(now);
+                auto then = timestamps.back();
+                timestamps.pop_back();
+                elapsed = now - then;
+                float preview_frame_rate = (float)(NUM_FRAMERATE_FRAMES - 1) / elapsed.count();
 
-            // Debayer if color camera
-            cv::Mat img_preview;
-            if (color)
-            {
-                cv::cvtColor(img_raw, img_preview, cv::COLOR_BayerBG2BGR);
+                show_preview(img_raw, color, preview_frame_rate);
+                last_preview_update = now;
             }
-            else
-            {
-                // Must make a copy so that crosshairs added later do not modify the original frame.
-                // Modifications to the original frame could end up being written to disk.
-                img_preview = img_raw.clone();
-            }
-
-            // Add grey crosshairs
-            cv::line(
-                img_preview,
-                cv::Point(Frame::WIDTH / 2, 0),
-                cv::Point(Frame::WIDTH / 2, Frame::HEIGHT - 1),
-                cv::Scalar(50, 50, 50),
-                1
-            );
-            cv::line(
-                img_preview,
-                cv::Point(0, Frame::HEIGHT / 2),
-                cv::Point(Frame::WIDTH - 1, Frame::HEIGHT / 2),
-                cv::Scalar(50, 50, 50),
-                1
-            );
-
-            // Show image with crosshairs in a window
-            cv::imshow(PREVIEW_WINDOW_NAME, img_preview);
         }
 
         // Check if the histogram window is actually still open
@@ -301,9 +315,9 @@ void preview(bool color)
         if (histogram_window_open)
         {
             // Display histogram
-            now = steady_clock::now();
-            elapsed = now - last_histogram_update;
-            if (elapsed.count() >= HISTOGRAM_UPDATE_PERIOD_S)
+            auto now = steady_clock::now();
+            duration<float> elapsed = now - last_histogram_update;
+            if (elapsed.count() >= MIN_HISTOGRAM_UPDATE_PERIOD_S)
             {
                 make_histogram(img_raw);
                 last_histogram_update = now;
