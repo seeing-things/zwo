@@ -17,7 +17,11 @@
 using namespace std::chrono;
 
 
+// All threads should end gracefully when this is true
 extern std::atomic_bool end_program;
+
+// Estimated rate of frames received from the camera
+extern std::atomic<float> camera_frame_rate;
 
 // AGC enable state
 extern std::atomic_bool agc_enabled;
@@ -198,8 +202,8 @@ void preview(bool color)
         timestamps.push_front(now);
         auto then = timestamps.back();
         timestamps.pop_back();
-        duration<double> elapsed = now - then;
-        double framerate = (double)(NUM_FRAMERATE_FRAMES - 1) / elapsed.count();
+        duration<float> elapsed = now - then;
+        float preview_frame_rate = (float)(NUM_FRAMERATE_FRAMES - 1) / elapsed.count();
 
         // Check if the preview window is actually still open
         if (preview_window_open)
@@ -223,9 +227,10 @@ void preview(bool color)
             {
                 sprintf(
                     window_title,
-                    "%s %.1f FPS %s",
+                    "%s %.1f FPS (%.1f FPS from camera) %s",
                     PREVIEW_WINDOW_NAME,
-                    framerate,
+                    preview_frame_rate,
+                    (float)camera_frame_rate,
                     (disk_write_enabled) ? (
                         "writing frames to disk (press s to pause)"
                     ) : (
@@ -235,7 +240,13 @@ void preview(bool color)
             }
             else
             {
-                sprintf(window_title, "%s %.1f FPS", PREVIEW_WINDOW_NAME, framerate);
+                sprintf(
+                    window_title,
+                    "%s %.1f FPS (%.1f FPS from camera)",
+                    PREVIEW_WINDOW_NAME,
+                    preview_frame_rate,
+                    (float)camera_frame_rate
+                );
             }
             cv::setWindowTitle(PREVIEW_WINDOW_NAME, window_title);
 

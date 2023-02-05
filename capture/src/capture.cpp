@@ -35,6 +35,9 @@ constexpr size_t FRAME_POOL_SIZE = 64;
 // All threads should end gracefully when this is true
 std::atomic_bool end_program = false;
 
+// Estimated rate of frames received from the camera
+std::atomic<float> camera_frame_rate = 0.0;
+
 // AGC enable state
 std::atomic_bool agc_enabled = false;
 

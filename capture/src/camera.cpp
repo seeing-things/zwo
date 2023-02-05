@@ -59,6 +59,9 @@ libusb_device_handle *dev_handle = nullptr;
 // All threads should end gracefully when this is true
 extern std::atomic_bool end_program;
 
+// Estimated rate of frames received from the camera
+extern std::atomic<float> camera_frame_rate;
+
 // AGC enable state
 extern std::atomic_bool agc_enabled;
 
@@ -479,16 +482,20 @@ void libusb_callback(libusb_transfer *transfer)
     // For calculating frame rate
     timestamps.push_front(steady_clock::now());
     timestamps.pop_back();
+    auto now = timestamps.front();
+    auto then = timestamps.back();
+    duration<float> elapsed = now - then;
+    camera_frame_rate = (float)(NUM_FRAMERATE_FRAMES - 1) / elapsed.count();
 
-    auto now = steady_clock::now();
+    now = steady_clock::now();
     if (now - stats_last_printed_ts > 1s)
     {
-        auto now = timestamps.front();
-        auto then = timestamps.back();
-        duration<double> elapsed = now - then;
-        double frame_rate = (double)(NUM_FRAMERATE_FRAMES - 1) / elapsed.count();
-
-        spdlog::info("{:6d} frames, {:6.2f} FPS over last {}", frame_count, frame_rate, NUM_FRAMERATE_FRAMES);
+        spdlog::info(
+            "{:6d} frames, {:6.2f} FPS over last {}",
+            frame_count,
+            camera_frame_rate,
+            NUM_FRAMERATE_FRAMES
+        );
         spdlog::debug(
             "Frame counts: To-disk queue: {}, to-AGC queue: {}, to-preview queue: {}, pool: {} free frames.",
             to_disk_deque.size(),
