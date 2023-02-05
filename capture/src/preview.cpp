@@ -299,14 +299,24 @@ void preview(bool color)
 
         if (key == 's')
         {
-            disk_write_enabled = !disk_write_enabled;
-            if (disk_write_enabled)
-            {
-                spdlog::info("Writing frames to disk if filename provided (press s to stop).");
-            }
-            else
-            {
-                spdlog::info("Not writing frames to disk (press s to start).");
+            if (disk_file_exists) {
+                disk_write_enabled = !disk_write_enabled;
+                if (disk_write_enabled)
+                {
+                    spdlog::info(
+                        "Resumed writing frames to disk. "
+                        "Press s with preview window in focus to stop."
+                    );
+                }
+                else
+                {
+                    spdlog::info(
+                        "Paused writing frames to disk. "
+                        "Press s with preview window in focus to resume."
+                    );
+                }
+            } else {
+                spdlog::warn("No SER output filename was provided! Not writing to disk.");
             }
         }
 
