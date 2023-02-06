@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include "ASICamera2.h"
 
 namespace camera
@@ -9,6 +10,6 @@ namespace camera
     constexpr int EXPOSURE_MIN_US = 32; // 32 is the minimum value for this camera
     constexpr int EXPOSURE_MAX_US = 16'667; // Max for ~60 FPS
 
-    void init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name, int binning = 1);
+    void init_camera(ASI_CAMERA_INFO &CamInfo, std::string cam_name, int binning = 1);
     void run_camera(ASI_CAMERA_INFO &CamInfo);
 }

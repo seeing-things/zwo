@@ -172,7 +172,7 @@ ASI_CAMERA_INFO prompt_user_for_camera()
 }
 
 
-ASI_CAMERA_INFO select_camera(const char *cam_name)
+ASI_CAMERA_INFO select_camera(std::string cam_name)
 {
     ASI_CAMERA_INFO CamInfo;
 
@@ -183,7 +183,7 @@ ASI_CAMERA_INFO select_camera(const char *cam_name)
         exit(1);
     }
 
-    if (cam_name == nullptr) {
+    if (cam_name.size() == 0) {
         if (num_devices == 1) {
             ASI_EXIT_ON_FAIL(ASIGetCameraProperty, &CamInfo, 0);
             spdlog::info("Connecting to the only camera available, named '{}'", CamInfo.Name);
@@ -195,7 +195,7 @@ ASI_CAMERA_INFO select_camera(const char *cam_name)
         for (int i = 0; i < num_devices; ++i) {
             ASI_EXIT_ON_FAIL(ASIGetCameraProperty, &CamInfo, i);
             // checks if second arg is substring of first
-            if (strcasestr(CamInfo.Name, cam_name) != nullptr) {
+            if (strcasestr(CamInfo.Name, cam_name.c_str()) != nullptr) {
                 matches.push_back(CamInfo);
             }
         }
@@ -216,7 +216,7 @@ ASI_CAMERA_INFO select_camera(const char *cam_name)
 }
 
 
-void camera::init_camera(ASI_CAMERA_INFO &CamInfo, const char *cam_name, int binning)
+void camera::init_camera(ASI_CAMERA_INFO &CamInfo, std::string cam_name, int binning)
 {
     CamInfo = select_camera(cam_name);
 

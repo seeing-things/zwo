@@ -39,16 +39,12 @@ extern std::condition_variable to_preview_deque_cv;
 extern std::deque<Frame *> to_preview_deque;
 
 // trackbar positions
+int agc_trackbar_pos;
 int gain_trackbar_pos;
 int exposure_trackbar_pos;
 
 constexpr char PREVIEW_WINDOW_NAME[] = "Live Preview";
 constexpr char HISTOGRAM_WINDOW_NAME[] = "Histogram";
-
-// Minimum time between window updates in seconds
-// These operations use a non-trivial amount of CPU
-constexpr double MIN_PREVIEW_UPDATE_PERIOD_S = 0.0;  // unlimited
-constexpr double MIN_HISTOGRAM_UPDATE_PERIOD_S = 0.25;  // 4 FPS max
 
 
 void make_histogram(cv::Mat &src)
@@ -186,7 +182,7 @@ void agc_mode_trackbar_callback(int pos, void *userdata)
 }
 
 
-void preview(bool color)
+void preview(bool color, float max_preview_fps, float max_histogram_fps)
 {
     spdlog::info("Preview thread id: {}", syscall(SYS_gettid));
 
@@ -194,10 +190,11 @@ void preview(bool color)
     cv::resizeWindow(PREVIEW_WINDOW_NAME, 640, 480);
     cv::namedWindow(HISTOGRAM_WINDOW_NAME, 1);
 
+    agc_trackbar_pos = (int)agc_enabled;
     cv::createTrackbar(
         "agc mode",
         HISTOGRAM_WINDOW_NAME,
-        nullptr,
+        &agc_trackbar_pos,
         1,
         agc_mode_trackbar_callback,
         nullptr
@@ -283,7 +280,7 @@ void preview(bool color)
             // Display histogram
             auto now = steady_clock::now();
             duration<float> elapsed = now - last_preview_update;
-            if (elapsed.count() >= MIN_PREVIEW_UPDATE_PERIOD_S)
+            if (elapsed.count() >= (1.0 / max_preview_fps))
             {
                 // Calculate preview window framerate over last NUM_FRAMERATE_FRAMES
                 timestamps.push_front(now);
@@ -317,7 +314,7 @@ void preview(bool color)
             // Display histogram
             auto now = steady_clock::now();
             duration<float> elapsed = now - last_histogram_update;
-            if (elapsed.count() >= MIN_HISTOGRAM_UPDATE_PERIOD_S)
+            if (elapsed.count() >= (1.0 / max_histogram_fps))
             {
                 make_histogram(img_raw);
                 last_histogram_update = now;
