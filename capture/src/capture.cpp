@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 #include <sys/syscall.h>
 #include <err.h>
+#include "CLI/CLI.hpp"
 #include "Frame.h"
 #include "agc.h"
 #include "disk.h"
@@ -111,9 +112,9 @@ void sigint_handler(int signal)
 }
 
 
-void check_if_file_exists(const char *filename)
+void check_if_file_exists(std::string filename)
 {
-    if (access(filename, F_OK) == -1)
+    if (access(filename.c_str(), F_OK) == -1)
     {
         // the file doesn't already exist, so we're okay to create a new one
         disk_file_exists = true;
@@ -121,7 +122,7 @@ void check_if_file_exists(const char *filename)
     }
 
     while (true) {
-        printf("%s already exists. Do you want to overwrite it? [y/N] ", filename);
+        printf("%s already exists. Do you want to overwrite it? [y/N] ", filename.c_str());
         char selection;
         int scanned = scanf("%c", &selection);
         if (scanned == 1) {
@@ -156,38 +157,35 @@ int main(int argc, char *argv[])
 
     spdlog::info("Main (camera) thread id: {}", syscall(SYS_gettid));
 
-    const char *cam_name = nullptr;
-    const char *filename = nullptr;
+    // Values here are defaults that may be overridden by command line arguments
+    std::string cam_name;
+    std::string filename;
     int binning = 1;
-    for (int i = 1; i < argc; ++i)
-    {
-        if (strncmp(argv[i], "camera=", 7) == 0)
-        {
-            cam_name = argv[i] + 7;
-        }
-        else if (strncmp(argv[i], "file=", 5) == 0)
-        {
-            filename = argv[i] + 5;
-        }
-        else if (strncmp(argv[i], "binning=", 8) == 0)
-        {
-            binning = std::stoi(argv[i] + 8);
-        }
-        else
-        {
-            errx(
-                1,
-                "Error: Program option '%s' not recognized\n"
-                "Usage: %s file=[output_filename.ser] camera=[camera name]",
-                argv[i], argv[0]
-            );
-        }
-    }
+    float max_preview_fps = 30.0;
+    float max_histogram_fps = 4.0;
+
+    CLI::App app{"Capture video from a ZWO camera."};
+    app.add_option("--camera", cam_name, "Camera name");
+    app.add_option("--file", filename, "Output SER filename");
+    app.add_option("--gain", camera_gain, "Initial camera gain")
+        ->check(CLI::Range(camera::GAIN_MIN, camera::GAIN_MAX))
+        ->capture_default_str();
+    app.add_option("--exposure", camera_exposure_us, "Initial camera exposure time [μs]")
+        ->check(CLI::Range(camera::EXPOSURE_MIN_US, camera::EXPOSURE_MAX_US))
+        ->capture_default_str();
+    app.add_option("--binning", binning, "Camera binning")->capture_default_str();
+    app.add_option("--max-preview-fps", max_preview_fps, "Max preview window refresh rate [frames/s]")
+        ->capture_default_str();
+    app.add_option("--max-histogram-fps", max_histogram_fps, "Max histogram refresh rate [updates/s]")
+        ->capture_default_str();
+    app.add_flag("--write-at-startup", disk_write_enabled, "Start writing to disk immediately");
+    app.add_flag("--agc", agc_enabled, "Enable automatic gain control");
+    CLI11_PARSE(app, argc, argv);
 
     // libasicamera2 threads will inherit this name
     set_thread_name(pthread_self(), "libasicamera2");
     ASI_CAMERA_INFO CamInfo;
-    camera::init_camera(CamInfo, cam_name, binning);
+    camera::init_camera(CamInfo, cam_name.c_str(), binning);
     set_thread_name(pthread_self(), "camera(main)");
 
     // Create pool of frame buffers
@@ -202,10 +200,10 @@ int main(int argc, char *argv[])
     }
 
     std::unique_ptr<SERFile> ser_file;
-    if (filename != nullptr) {
+    if (filename.size() > 0) {
         check_if_file_exists(filename);
         ser_file.reset(new SERFile(
-            filename,
+            filename.c_str(),
             Frame::WIDTH,
             Frame::HEIGHT,
             (CamInfo.IsColorCam == ASI_TRUE) ? BAYER_RGGB : MONO,
@@ -221,7 +219,12 @@ int main(int argc, char *argv[])
 
     // Start threads
     static std::thread write_to_disk_thread(write_to_disk, ser_file.get());
-    static std::thread preview_thread(preview, CamInfo.IsColorCam == ASI_TRUE);
+    static std::thread preview_thread(
+        preview,
+        CamInfo.IsColorCam == ASI_TRUE,
+        max_preview_fps,
+        max_histogram_fps
+    );
     static std::thread agc_thread(agc);
 
     // Set real-time priority for latency-sensitive threads.
