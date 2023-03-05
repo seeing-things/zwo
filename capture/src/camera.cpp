@@ -423,7 +423,7 @@ void libusb_callback(libusb_transfer *transfer)
     }
 
     if (transfer->length != transfer->actual_length) {
-        spdlog::error("Expected {:n} bytes from USB bulk transfer but got {:n} (diff: {:n})",
+        spdlog::error("Expected {} bytes from USB bulk transfer but got {} (diff: {})",
             transfer->length, transfer->actual_length, transfer->actual_length - transfer->length
         );
     }
