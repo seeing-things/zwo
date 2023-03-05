@@ -70,12 +70,12 @@ struct [[gnu::packed]] SERHeader_t
     // 13. Start time of image stream in UTC.
     int64_t DateTime_UTC = 0;
 
-	SERHeader_t() noexcept
-	{
-		memset(Observer,   0, sizeof(Observer));
-		memset(Instrument, 0, sizeof(Instrument));
-		memset(Telescope,  0, sizeof(Telescope));
-	}
+    SERHeader_t() noexcept
+    {
+        memset(Observer,   0, sizeof(Observer));
+        memset(Instrument, 0, sizeof(Instrument));
+        memset(Telescope,  0, sizeof(Telescope));
+    }
 };
 
 
