@@ -115,8 +115,9 @@ SERFile::~SERFile()
     {
         if (header_->FrameCount != static_cast<int32_t>(frame_timestamps_.size()))
         {
+            auto frame_count = header_->FrameCount;
             spdlog::error("SERFile class frame count {} does not match timestamp vector size {}",
-                header_->FrameCount,
+                frame_count,
                 frame_timestamps_.size()
             );
         }
